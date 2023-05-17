@@ -1,0 +1,14 @@
+version: '3.4'
+
+services:
+  poke_chat:
+    image: poke_chat
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: debug
+    ports:
+      - 3000:3000
+    volumes:
+      - .:/src:cached
+    env_file: .env
