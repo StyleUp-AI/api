@@ -1,0 +1,9 @@
+Flask
+python-dotenv
+uwsgi
+pymongo
+bcrypt
+pyjwt
+uuid
+semantic_kernel
+asyncio

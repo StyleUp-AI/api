@@ -1,0 +1,13 @@
+[project]
+name = "PokeChat"
+version = "0.0.1"
+# ...
+dependencies = [
+    "Flask >= 2.2",
+    "python-dotenv",
+    "uwsgi",
+    "pymongo",
+    "bcrypt",
+    "jwt",
+    "uuid"
+]
