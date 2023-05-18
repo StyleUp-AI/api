@@ -4,19 +4,17 @@ import json
 import numpy as np
 import asyncio, concurrent.futures
 import semantic_kernel as sk
-from semantic_kernel.connectors.ai.open_ai import OpenAITextCompletion, OpenAITextEmbedding, AzureTextCompletion
+from semantic_kernel.connectors.ai.open_ai import OpenAITextCompletion, OpenAITextEmbedding
 from flask import Blueprint, request, jsonify, make_response
 from typing import List
 from datetime import datetime, timezone
 from sentence_transformers import SentenceTransformer, util
-import semantic_kernel as sk
 from bson.objectid import ObjectId
 from sklearn.metrics.pairwise import cosine_similarity
 from src.main.routes import user_token_required, bot_api_key_required, get_client
 
 bots_routes = Blueprint('bots_routes', __name__)
 model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
-
 
 kernel = sk.Kernel()
 
@@ -118,15 +116,42 @@ def add_collection(current_user):
     users.update_one({'id': current_user['id']}, {'$set':{'my_files': current_user['my_files']}})
     return make_response(jsonify({'data': 'New collection added'}), 201)
 
-@bots_routes.route('/reset_context', methods=['POST'])
+@bots_routes.route('/add_collection_batch', methods=['POST'])
 @user_token_required
+def add_collection_batch(current_user):
+    payload = request.json
+    if payload['collection_list'] is None:
+        return make_response(jsonify({'error': 'Collection items must not be none'}), 400)
+    res = {}
+    code_list = []
+    vectors = model.encode(payload['collection_list'])
+    arr = np.array(vectors)
+    arr_as_list = arr.tolist()
+    res['vectors'] = arr_as_list
+    res['texts'] = payload['collection_list']
+    current_date_time = datetime.now(timezone.utc)
+    file_name = 'Documents/' + current_user['id'] + '/' + payload['collection_name'] + '.json'
+    os.makedirs(os.path.dirname(file_name), exist_ok=True)
+    with open(file_name, 'w+') as f:
+        json.dump(res, f)
+    db = get_client()
+    users = db['users']
+    if 'my_files' in current_user:
+        current_user['my_files'].append(file_name)
+    else:
+        current_user['my_files'] = [file_name]
+    users.update_one({'id': current_user['id']}, {'$set':{'my_files': current_user['my_files']}})
+    return make_response(jsonify({'data': 'New collection added'}), 201)
+
+@bots_routes.route('/reset_context', methods=['POST'])
+@bot_api_key_required
 def reset_context(current_user):
     payload = request.json
     setup_chat_with_memory(payload['relevance_score'])
     return make_response(jsonify({'message': 'Context refreshed'}), 200)
 
 @bots_routes.route('/chat', methods=['POST'])
-@user_token_required
+@bot_api_key_required
 def chat(current_user):
     payload = request.json
     if payload is None or payload['input'] is None:
