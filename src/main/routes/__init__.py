@@ -43,6 +43,16 @@ Chat:
 User: {{$user_input}}
 ChatBot: """.strip()
 
+html_template = """\
+<html>
+  <body>
+    <p>Hi,<br>
+       Please find your otp {0}
+    </p>
+  </body>
+</html>
+"""
+
 def get_client():
     return mongo_client["poke_chat"]
 
