@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, make_response
 from datetime import datetime, timedelta
-from src.main.routes import get_client
+from src.main.routes import get_client, user_token_required
 from werkzeug.security import check_password_hash, generate_password_hash
 import secrets
 import jwt
@@ -24,10 +24,22 @@ def signup():
     api_key.insert_one({'key': secrets.token_urlsafe(32),'user_id': new_user_id})
     return make_response(jsonify({'data': 'User registeration success!'}), 201)
 
+@user_routes.route('/delete_user', methods=['DELETE'])
+@user_token_required
+def delete_user(current_user):
+    db = get_client()
+    users = db['users']
+    api_key = db['api_keys']
+    for item in current_user['my_files']:
+        os.remove(item):
+    api_keys.delete_many({'user_id': current_user['id']})
+    users.delete_one({'id': current_user['id']})
+    return make_response(jsonify({'data': 'User delete successfully!'}), 200)
+
+
 @user_routes.route('/signin', methods=['POST'])
 def signin():
     payload = request.json
-    print(payload)
     if not payload or not payload['email'] or not payload['password']:
         return make_response(jsonify({'error': 'Must provide email and password'}), 400, None)
     db = get_client()

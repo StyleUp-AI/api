@@ -1,6 +1,8 @@
 import uuid
 import os
 import json
+import csv
+import pandas as pd
 import numpy as np
 import asyncio, concurrent.futures
 import semantic_kernel as sk
@@ -89,6 +91,55 @@ async def talk_bot(user_input: str, file_name: str, relevance_score: float) -> d
 
     return default_answer.result
 
+@bots_routes.route('/update_collection', methods=['PUT'])
+@user_token_required
+def update_collection(current_user):
+    payload = request.json
+    if payload['collection_list'] is None or payload['collection_name'] is None:
+        return make_response(jsonify({'error': 'Collection items must not be none'}), 400)
+    res = {}
+    vectors = model.encode(payload['collection_list'])
+    arr = np.array(vectors)
+    arr_as_list = arr.tolist()
+    res['vectors'] = arr_as_list
+    res['texts'] = payload['collection_list']
+    file_name = 'Documents/' + current_user['id'] + '/' + payload['collection_name'] + '.json'
+    os.makedirs(os.path.dirname(file_name), exist_ok=True)
+    with open(file_name, 'w+') as f:
+        json.dump(res, f)
+    return make_response(jsonify({'data': 'Collection updated'}), 200)
+
+@bots_routes.route('/get_collections', methods=['GET'])
+@user_token_required
+def get_collections(current_user):
+    return make_response(jsonify({'data': current_user['my_files']}), 200)
+
+@bots_routes.route('/get_collection', methods=['GET'])
+@user_token_required
+def get_collections(current_user):
+    args = request.args
+    if args['collection_name'] is None:
+        return make_response(jsonify({'error': 'Must provide collection name'}), 400)
+    file_name = 'Documents/' + current_user['id'] + '/' + args['collection_name'] + '.json'
+    os.makedirs(os.path.dirname(file_name), exist_ok=True)
+    data = {}
+    with open(file_name) as j:
+        data = json.load(j)
+    return make_response(jsonify({'data': data}), 200)
+
+@bots_routes.route('/delete_collection', methods=['DELETE'])
+@user_token_required
+def delete_collection(current_user):
+    args = request.args
+    if args['collection_name'] is None:
+        return make_response(jsonify({'error': 'Must provide collection name'}), 400)
+    if args['collection_name'] not in current_user['my_files']:
+        return make_response(jsonify({'error': 'User does not own this collection'}), 400)
+    file_name = 'Documents/' + current_user['id'] + '/' + args['collection_name'] + '.json'
+    os.makedirs(os.path.dirname(file_name), exist_ok=True)
+    os.remove(file_name):
+    return make_response(jsonify({'data': 'File removed successfully'}), 200)
+
 @bots_routes.route('/add_collection', methods=['POST'])
 @user_token_required
 def add_collection(current_user):
@@ -96,13 +147,11 @@ def add_collection(current_user):
     if payload['collection_list'] is None:
         return make_response(jsonify({'error': 'Collection items must not be none'}), 400)
     res = {}
-    code_list = []
     vectors = model.encode(payload['collection_list'])
     arr = np.array(vectors)
     arr_as_list = arr.tolist()
     res['vectors'] = arr_as_list
     res['texts'] = payload['collection_list']
-    current_date_time = datetime.now(timezone.utc)
     file_name = 'Documents/' + current_user['id'] + '/' + payload['collection_name'] + '.json'
     os.makedirs(os.path.dirname(file_name), exist_ok=True)
     with open(file_name, 'w+') as f:
@@ -120,28 +169,66 @@ def add_collection(current_user):
 @user_token_required
 def add_collection_batch(current_user):
     payload = request.json
-    if payload['collection_list'] is None:
-        return make_response(jsonify({'error': 'Collection items must not be none'}), 400)
-    res = {}
-    code_list = []
-    vectors = model.encode(payload['collection_list'])
-    arr = np.array(vectors)
-    arr_as_list = arr.tolist()
-    res['vectors'] = arr_as_list
-    res['texts'] = payload['collection_list']
-    current_date_time = datetime.now(timezone.utc)
-    file_name = 'Documents/' + current_user['id'] + '/' + payload['collection_name'] + '.json'
-    os.makedirs(os.path.dirname(file_name), exist_ok=True)
-    with open(file_name, 'w+') as f:
-        json.dump(res, f)
+    if 'files' not in request.files:
+        return make_response(jsonify({'error': 'File must provide'}), 400)
+    files = request.files['files']
     db = get_client()
     users = db['users']
-    if 'my_files' in current_user:
-        current_user['my_files'].append(file_name)
-    else:
-        current_user['my_files'] = [file_name]
-    users.update_one({'id': current_user['id']}, {'$set':{'my_files': current_user['my_files']}})
+    for i, file in enumerate(files):
+        (file_name, file_extension) = os.path.splitext(file.filename)
+        if file_extension != 'csv' or file_extension != 'xlsx':
+            return make_response(jsonify({'error: ' 'File: ' + file_name + ' is not valid csv or excel file'}), 400)
+        if file_extension == 'csv':
+            file_path = 'Tmp/' + current_user['id'] + '/' + file.filename
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            file.save(file_path)
+            data = []
+            with open(file_path) as f:
+                csv_file = csv.reader(f)
+                for row in csv_file:
+                    data.append(row.split(","))
+            res = {}
+            vectors = model.encode(data)
+            arr = np.array(vectors)
+            arr_as_list = arr.tolist()
+            res['vectors'] = arr_as_list
+            res['texts'] = data
+            json_file_name = 'Documents/' + current_user['id'] + '/' + file_name + '.json'
+            os.makedirs(os.path.dirname(file_name), exist_ok=True)
+            with open(file_name, 'w+') as f:
+                json.dump(res, f)
+            if 'my_files' in current_user:
+                current_user['my_files'].append(file_name)
+            else:
+                current_user['my_files'] = [file_name]
+            users.update_one({'id': current_user['id']}, {'$set':{'my_files': current_user['my_files']}})
+        else:
+            file_path = 'Tmp/' + current_user['id'] + '/' + file.filename
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            file.save(file_path)
+            data = []
+            with open(file_path) as f:
+                excel_file = pd.read_excel(f, header=None)
+                for column in excel_file.columns:
+                    column_values = excel_file[column].tolist()
+                    data.append(column_values)
+            res = {}
+            vectors = model.encode(data)
+            arr = np.array(vectors)
+            arr_as_list = arr.tolist()
+            res['vectors'] = arr_as_list
+            res['texts'] = data
+            json_file_name = 'Documents/' + current_user['id'] + '/' + file_name + '.json'
+            os.makedirs(os.path.dirname(file_name), exist_ok=True)
+            with open(file_name, 'w+') as f:
+                json.dump(res, f)
+            if 'my_files' in current_user:
+                current_user['my_files'].append(file_name)
+            else:
+                current_user['my_files'] = [file_name]
+            users.update_one({'id': current_user['id']}, {'$set':{'my_files': current_user['my_files']}})
     return make_response(jsonify({'data': 'New collection added'}), 201)
+
 
 @bots_routes.route('/reset_context', methods=['POST'])
 @bot_api_key_required
