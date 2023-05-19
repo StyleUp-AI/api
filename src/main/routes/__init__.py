@@ -1,6 +1,7 @@
 import certifi
 import os
 import jwt
+import boto3, botocore
 from urllib.parse import quote_plus
 from functools import wraps
 from flask import Flask, request, jsonify, make_response
@@ -9,6 +10,11 @@ from pymongo.mongo_client import MongoClient
 user_name = quote_plus(os.environ.get("USER_NAME"))
 password = quote_plus(os.environ.get("PASSWORD"))
 cluster = quote_plus(os.environ.get("CLUSTER"))
+aws_key = os.environ.get("AWS_ACCESS_KEY")
+aws_secret_key = os.environ.get("AWS_SECRET_KEY")
+bucket_name = os.environ.get("AWS_BUCKET_NAME")
+aws_domain = os.environ.get("AWS_DOMAIN")
+
 uri = (
     "mongodb+srv://"
     + user_name
@@ -20,6 +26,12 @@ uri = (
 )
 
 mongo_client = MongoClient(uri, tlsCAFile=certifi.where())
+
+s3 = boto3.client(
+    "s3",
+    aws_access_key_id=aws_key,
+    aws_secret_access_key=aws_secret_key
+)
 
 sk_prompt = """
 ChatBot can have a conversation with you about any topic.

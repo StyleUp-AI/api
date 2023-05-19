@@ -9,3 +9,4 @@ semantic_kernel
 asyncio
 csv
 pandas
+boto3
