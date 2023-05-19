@@ -21,6 +21,15 @@ uri = (
 
 mongo_client = MongoClient(uri, tlsCAFile=certifi.where())
 
+sk_prompt = """
+ChatBot can have a conversation with you about any topic.
+It can give explicit instructions or say 'I don't know' if
+it does not have an answer.
+
+Chat:
+{{$chat_history}}
+User: {{$user_input}}
+ChatBot: """.strip()
 
 def get_client():
     return mongo_client["poke_chat"]

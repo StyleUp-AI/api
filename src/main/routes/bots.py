@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from sentence_transformers import SentenceTransformer, util
 from bson.objectid import ObjectId
 from sklearn.metrics.pairwise import cosine_similarity
-from src.main.routes import user_token_required, bot_api_key_required, get_client
+from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt
 
 bots_routes = Blueprint("bots_routes", __name__)
 model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
@@ -35,13 +35,7 @@ kernel.add_text_embedding_generation_service(
 kernel.register_memory_store(memory_store=sk.memory.VolatileMemoryStore())
 kernel.import_skill(sk.core_skills.TextMemorySkill())
 
-context_template = {}
-with open("context_template") as j:
-    context_template = json.load(j)
-sk_prompt = context_template["template"].strip()
-
 context = kernel.create_new_context()
-
 context["chat_history"] = ""
 
 chat_func = kernel.create_semantic_function(sk_prompt, max_tokens=200, temperature=0.8)
@@ -52,7 +46,6 @@ def reset_context(relevance_score: float) -> None:
     global context
     global chat_func
     global kernel
-    sk_prompt = context_template.strip()
 
     context = kernel.create_new_context()
     context["chat_history"] = ""
@@ -67,7 +60,7 @@ def add_collection_from_file(file, file_name, file_extension):
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     file.save(file_path)
     data = []
-    if file_extension is "csv":
+    if file_extension == "csv":
         with open(file_path) as f:
             csv_file = csv.reader(f)
             for row in csv_file:
@@ -158,7 +151,7 @@ def get_collections(current_user):
 
 @bots_routes.route("/get_collection", methods=["GET"])
 @user_token_required
-def get_collections(current_user):
+def get_collection(current_user):
     args = request.args
     if args["collection_name"] is None:
         return make_response(jsonify({"error": "Must provide collection name"}), 400)
@@ -233,7 +226,7 @@ def add_collection_batch(current_user):
     users = db["users"]
     for i, file in enumerate(files):
         (file_name, file_extension) = os.path.splitext(file.filename)
-        if file_extension is not "csv" or file_extension is not "xlsx":
+        if file_extension != "csv" or file_extension != "xlsx":
             return make_response(
                 jsonify(
                     {"error: " "File: " + file_name + " is not valid csv or excel file"}
