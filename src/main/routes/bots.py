@@ -42,7 +42,7 @@ chat_func = kernel.create_semantic_function(sk_prompt, max_tokens=200, temperatu
 pool = concurrent.futures.ThreadPoolExecutor()
 
 
-def reset_context(relevance_score: float) -> None:
+def reset_context(relevance_score):
     global context
     global chat_func
     global kernel
@@ -89,6 +89,7 @@ def add_collection_from_file(file, file_name, file_extension):
     users.update_one(
         {"id": current_user["id"]}, {"$set": {"my_files": current_user["my_files"]}}
     )
+    os.remove(file_path)
 
 
 async def talk_bot(user_input, file_name, relevance_score):
