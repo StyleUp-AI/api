@@ -7,3 +7,5 @@ pyjwt
 uuid
 semantic_kernel
 asyncio
+csv
+pandas
