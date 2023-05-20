@@ -6,7 +6,7 @@ bcrypt
 pyjwt
 uuid
 semantic_kernel
+sentence_transformers
 asyncio
-csv
 pandas
 boto3
