@@ -4,12 +4,13 @@ version = "0.0.1"
 # ...
 dependencies = [
     "Flask >= 2.2",
-    "python-dotenv",
-    "uwsgi",
-    "pymongo",
-    "bcrypt",
-    "jwt",
-    "uuid",
-    "numpy",
-    "pandas"
+    "Flask-Cors==3.0.10",
+    "python-dotenv==1.0.0",
+    "pymongo==4.3.3",
+    "bcrypt==4.0.1",
+    "pyjwt==2.7.0",
+    "uuid==1.30",
+    "semantic-kernel",
+    "sentence-transformers==2.2.2",
+    "asyncio==3.4.3"
 ]

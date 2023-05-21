@@ -8,9 +8,5 @@ services:
     build: .
     ports:
       - "3000:3000"
-    volumes:
-      - "/etc/timezone:/etc/timezone:ro"
-      - "/etc/localtime:/etc/localtime:ro"
-      - .:/src:cached
     env_file:
       - .env

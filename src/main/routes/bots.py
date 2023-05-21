@@ -270,7 +270,7 @@ def add_collection_batch(current_user):
 
 @bots_routes.route("/reset_context", methods=["POST"])
 @cross_origin(origin='*')
-@bot_api_key_required
+@user_token_required
 def reset_context(current_user):
     payload = request.json
     reset_context(payload["relevance_score"])
@@ -279,7 +279,7 @@ def reset_context(current_user):
 
 @bots_routes.route("/chat", methods=["POST"])
 @cross_origin(origin='*')
-@bot_api_key_required
+@user_token_required
 def chat(current_user):
     payload = request.json
     if payload is None or payload["input"] is None:
