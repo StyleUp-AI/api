@@ -22,8 +22,9 @@ from src.main.routes import user_token_required, bot_api_key_required, get_clien
 bots_routes = Blueprint("bots_routes", __name__)
 @bots_routes.after_request
 def after_request(response):
-    header = response.headers
-    header['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,PATCH,POST,DELETE'
+    response.headers['Access-Control-Allow-Headers'] = 'Origin, X-Requested-With, Content-Type, Accept'
     # Other headers can be added here if needed
     return response
 
