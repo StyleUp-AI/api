@@ -4,6 +4,7 @@ import json
 import csv
 import pandas as pd
 import numpy as np
+from flask_cors import cross_origin
 import asyncio, concurrent.futures
 import semantic_kernel as sk
 from semantic_kernel.connectors.ai.open_ai import (
@@ -125,6 +126,7 @@ async def talk_bot(user_input, file_name, relevance_score):
 
 
 @bots_routes.route("/update_collection", methods=["PUT"])
+@cross_origin
 @user_token_required
 def update_collection(current_user):
     payload = request.json
@@ -150,12 +152,14 @@ def update_collection(current_user):
 
 
 @bots_routes.route("/get_collections", methods=["GET"])
+@cross_origin
 @user_token_required
 def get_collections(current_user):
     return make_response(jsonify({"data": current_user["my_files"]}), 200)
 
 
 @bots_routes.route("/get_collection", methods=["GET"])
+@cross_origin
 @user_token_required
 def get_collection(current_user):
     args = request.args
@@ -170,6 +174,7 @@ def get_collection(current_user):
 
 
 @bots_routes.route("/delete_collection", methods=["DELETE"])
+@cross_origin
 @user_token_required
 def delete_collection(current_user):
     args = request.args
@@ -198,6 +203,7 @@ def delete_collection(current_user):
 
 
 @bots_routes.route("/add_collection", methods=["POST"])
+@cross_origin
 @user_token_required
 def add_collection(current_user):
     payload = request.json
@@ -232,6 +238,7 @@ def add_collection(current_user):
 
 
 @bots_routes.route("/add_collection_batch", methods=["POST"])
+@cross_origin
 @user_token_required
 def add_collection_batch(current_user):
     payload = request.json
@@ -254,6 +261,7 @@ def add_collection_batch(current_user):
 
 
 @bots_routes.route("/reset_context", methods=["POST"])
+@cross_origin
 @bot_api_key_required
 def reset_context(current_user):
     payload = request.json
@@ -262,6 +270,7 @@ def reset_context(current_user):
 
 
 @bots_routes.route("/chat", methods=["POST"])
+@cross_origin
 @bot_api_key_required
 def chat(current_user):
     payload = request.json

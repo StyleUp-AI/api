@@ -8,6 +8,7 @@ import smtplib, ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from flask import Blueprint, request, jsonify, make_response
+from flask_cors import cross_origin
 from datetime import datetime, timedelta
 from src.main.routes import get_client, user_token_required, html_template
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -16,6 +17,7 @@ user_routes = Blueprint("user_routes", __name__)
 
 
 @user_routes.route("/signup", methods=["POST"])
+@cross_origin
 def signup():
     new_user = request.json
     db = get_client()
@@ -38,6 +40,7 @@ def signup():
     return make_response(jsonify({"data": "User registeration success!"}), 201)
 
 @user_routes.route("/get_otp", methods=["GET"])
+@cross_origin
 def get_otp():
     args = request.args
     num = random.randrange(1, 10**6)
@@ -69,6 +72,7 @@ def get_otp():
     return make_response(jsonify({"data": "Otp sent"}), 200)
 
 @user_routes.route("/verify_otp", methods=["POST"])
+@cross_origin
 def verify_otp():
     payload = request.json
     otp_code = payload['otp_code']
@@ -81,6 +85,7 @@ def verify_otp():
     return make_response(jsonify({"data": "Otp verified"}), 200)
 
 @user_routes.route("/reset_password", methods=["PATCH"])
+@cross_origin
 def reset_password():
     payload = request.json
     new_password = payload['password']
@@ -97,6 +102,7 @@ def reset_password():
     return make_response(jsonify({"error": "Password must be at least 8 characters and contain one upper case letter, one lower case letter, one number and one special character"}), 400)
 
 @user_routes.route("/delete_user", methods=["DELETE"])
+@cross_origin
 @user_token_required
 def delete_user(current_user):
     db = get_client()
@@ -114,6 +120,7 @@ def delete_user(current_user):
 
 
 @user_routes.route("/signin", methods=["POST"])
+@cross_origin
 def signin():
     payload = request.json
     if not payload or not payload["email"] or not payload["password"]:
