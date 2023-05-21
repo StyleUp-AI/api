@@ -4,6 +4,7 @@ pymongo
 bcrypt
 pyjwt
 uuid
+gunicorn
 semantic_kernel
 sentence_transformers
 asyncio
