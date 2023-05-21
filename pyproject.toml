@@ -9,5 +9,7 @@ dependencies = [
     "pymongo",
     "bcrypt",
     "jwt",
-    "uuid"
+    "uuid",
+    "numpy",
+    "pandas"
 ]

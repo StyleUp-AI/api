@@ -16,7 +16,8 @@ from datetime import datetime, timezone
 from sentence_transformers import SentenceTransformer, util
 from bson.objectid import ObjectId
 from sklearn.metrics.pairwise import cosine_similarity
-from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt
+from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, s3, bucket_name, aws_domain
+
 
 bots_routes = Blueprint("bots_routes", __name__)
 model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
@@ -42,7 +43,7 @@ chat_func = kernel.create_semantic_function(sk_prompt, max_tokens=200, temperatu
 pool = concurrent.futures.ThreadPoolExecutor()
 
 
-def reset_context(relevance_score: float) -> None:
+def reset_context(relevance_score):
     global context
     global chat_func
     global kernel
@@ -79,9 +80,11 @@ def add_collection_from_file(file, file_name, file_extension):
     res["vectors"] = arr_as_list
     res["texts"] = data
     json_file_name = "Documents/" + current_user["id"] + "/" + file_name + ".json"
-    os.makedirs(os.path.dirname(file_name), exist_ok=True)
-    with open(file_name, "w+") as f:
-        json.dump(res, f)
+    try:
+        s3.put_object(Bucket=bucket_name, Key=file_name, Body=json.dumps(res, indent=2, default=str))
+    except Exception as e:
+        print(e)
+        raise
     if "my_files" in current_user:
         current_user["my_files"].append(file_name)
     else:
@@ -89,6 +92,7 @@ def add_collection_from_file(file, file_name, file_extension):
     users.update_one(
         {"id": current_user["id"]}, {"$set": {"my_files": current_user["my_files"]}}
     )
+    os.remove(file_path)
 
 
 async def talk_bot(user_input, file_name, relevance_score):
@@ -137,9 +141,11 @@ def update_collection(current_user):
     file_name = (
         "Documents/" + current_user["id"] + "/" + payload["collection_name"] + ".json"
     )
-    os.makedirs(os.path.dirname(file_name), exist_ok=True)
-    with open(file_name, "w+") as f:
-        json.dump(res, f)
+    try:
+        s3.put_object(Bucket=bucket_name, Key=file_name, Body=json.dumps(res, indent=2, default=str))
+    except Exception as e:
+        print(e)
+        return make_response(jsonify({"error": "Cannot update the collection"}), 400)
     return make_response(jsonify({"data": "Collection updated"}), 200)
 
 
@@ -158,11 +164,9 @@ def get_collection(current_user):
     file_name = (
         "Documents/" + current_user["id"] + "/" + args["collection_name"] + ".json"
     )
-    os.makedirs(os.path.dirname(file_name), exist_ok=True)
-    data = {}
-    with open(file_name) as j:
-        data = json.load(j)
-    return make_response(jsonify({"data": data}), 200)
+    res = s3.get_object(Bucket=bucket_name, Key=file_name)
+    data = json.loads(res['Body'].read().decode("utf-8"))
+    return make_response(jsonify({"data": data['texts']}), 200)
 
 
 @bots_routes.route("/delete_collection", methods=["DELETE"])
@@ -171,15 +175,25 @@ def delete_collection(current_user):
     args = request.args
     if args["collection_name"] is None:
         return make_response(jsonify({"error": "Must provide collection name"}), 400)
-    if args["collection_name"] not in current_user["my_files"]:
-        return make_response(
-            jsonify({"error": "User does not own this collection"}), 400
-        )
+
     file_name = (
         "Documents/" + current_user["id"] + "/" + args["collection_name"] + ".json"
     )
-    os.makedirs(os.path.dirname(file_name), exist_ok=True)
-    os.remove(file_name)
+    if file_name not in current_user["my_files"]:
+        return make_response(
+            jsonify({"error": "User does not own this collection"}), 400
+        )
+
+    try:
+        s3.Object(bucket_name, file_name).delete()
+    except Exception as e:
+        print(e)
+        return make_response(jsonify({"error": "Cannot remove collection"}), 400)
+
+    db = get_client()
+    users = db["users"]
+    current_user["my_files"].remove(file_name)
+    users.update_one({'id': current_user['id']}, {'$set': {'my_files': current_user['my_files']}})
     return make_response(jsonify({"data": "File removed successfully"}), 200)
 
 
@@ -200,9 +214,11 @@ def add_collection(current_user):
     file_name = (
         "Documents/" + current_user["id"] + "/" + payload["collection_name"] + ".json"
     )
-    os.makedirs(os.path.dirname(file_name), exist_ok=True)
-    with open(file_name, "w+") as f:
-        json.dump(res, f)
+    try:
+        s3.put_object(Bucket=bucket_name, Key=file_name, Body=json.dumps(res, indent=2, default=str))
+    except Exception as e:
+        print(e)
+        return make_response(jsonify({"error": "Cannot save the collection"}), 400)
     db = get_client()
     users = db["users"]
     if "my_files" in current_user:
