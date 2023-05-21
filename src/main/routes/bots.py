@@ -117,9 +117,8 @@ async def talk_bot(user_input, file_name, relevance_score):
         print("\n\nExiting chat...")
         return ""
 
-    data = {}
-    with open(file_name) as j:
-        data = json.load(j)
+    res = s3.get_object(Bucket=bucket_name, Key=file_name)
+    data = json.loads(res['Body'].read().decode("utf-8"))
     vectors_input = model.encode(user_input)
     res = cosine_similarity([vectors_input], data["vectors"])
     max_index = np.argmax(res)
