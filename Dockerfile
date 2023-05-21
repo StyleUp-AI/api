@@ -1,6 +1,7 @@
-FROM python:3.11 as base
+FROM python:3.8-slim-buster as base
 WORKDIR /deploy/
-COPY . /deploy/
-RUN pip3 install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements.txt
+RUN pip3 install -r requirements.txt
+COPY . .
 EXPOSE 3000
 CMD ["flask", "--app", "index.py", "run", "-p","3000"]

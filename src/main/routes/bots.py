@@ -18,6 +18,7 @@ from bson.objectid import ObjectId
 from sklearn.metrics.pairwise import cosine_similarity
 from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, s3, bucket_name, aws_domain
 
+
 bots_routes = Blueprint("bots_routes", __name__)
 model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 

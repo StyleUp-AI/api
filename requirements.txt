@@ -1,6 +1,5 @@
 Flask
 python-dotenv
-uwsgi
 pymongo
 bcrypt
 pyjwt
