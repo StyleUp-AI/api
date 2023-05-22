@@ -10,6 +10,7 @@ from semantic_kernel.connectors.ai.open_ai import (
     OpenAITextCompletion,
     OpenAITextEmbedding,
 )
+from azure.storage.blob import BlobServiceClient
 from flask import Blueprint, request, jsonify, make_response
 from flask_cors import cross_origin
 from typing import List
@@ -17,8 +18,7 @@ from datetime import datetime, timezone
 from sentence_transformers import SentenceTransformer, util
 from bson.objectid import ObjectId
 from sklearn.metrics.pairwise import cosine_similarity
-from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, s3, bucket_name, aws_domain
-
+from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_account_key, azure_account_name, azure_container_name
 
 bots_routes = Blueprint("bots_routes", __name__)
 @bots_routes.after_request
@@ -51,6 +51,10 @@ context["chat_history"] = ""
 chat_func = kernel.create_semantic_function(sk_prompt, max_tokens=200, temperature=0.8)
 pool = concurrent.futures.ThreadPoolExecutor()
 
+def upload_to_blob_storage(file_path, file_name, data):
+    blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+    blob_client = blob_service_client.get_blob_client(container=azure_container_name, blob=file_name)
+    blob_client.upload_blob(data)
 
 def reset_context(relevance_score):
     global context
@@ -88,16 +92,17 @@ def add_collection_from_file(file, file_name, file_extension):
     arr_as_list = arr.tolist()
     res["vectors"] = arr_as_list
     res["texts"] = data
-    json_file_name = "Documents/" + current_user["id"] + "/" + file_name + ".json"
+    json_file_path = "Documents/" + current_user["id"]
+    json_file_name = file_name + ".json"
     try:
-        s3.put_object(Bucket=bucket_name, Key=file_name, Body=json.dumps(res, indent=2, default=str))
+        upload_to_blob_storage(json_file_path, json_file_name, json.dumps(res, indent=2, default=str))
     except Exception as e:
         print(e)
         raise
     if "my_files" in current_user:
-        current_user["my_files"].append(file_name)
+        current_user["my_files"].append(json_file_name)
     else:
-        current_user["my_files"] = [file_name]
+        current_user["my_files"] = [json_file_name]
     users.update_one(
         {"id": current_user["id"]}, {"$set": {"my_files": current_user["my_files"]}}
     )
@@ -147,11 +152,12 @@ def update_collection(current_user):
     arr_as_list = arr.tolist()
     res["vectors"] = arr_as_list
     res["texts"] = payload["collection_list"]
-    file_name = (
-        "Documents/" + current_user["id"] + "/" + payload["collection_name"] + ".json"
-    )
+    file_name = payload["collection_name"] + ".json"
     try:
-        s3.put_object(Bucket=bucket_name, Key=file_name, Body=json.dumps(res, indent=2, default=str))
+        blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+        container_client = blob_service_client.get_container_client(azure_container_name)
+        blob_client = container_client.get_blob_client(file_name)
+        blob_client.upload_blob(json.dumps(res, indent=2, default=str), overwrite=True)
     except Exception as e:
         print(e)
         return make_response(jsonify({"error": "Cannot update the collection"}), 400)
@@ -172,11 +178,12 @@ def get_collection(current_user):
     args = request.args
     if args["collection_name"] is None:
         return make_response(jsonify({"error": "Must provide collection name"}), 400)
-    file_name = (
-        "Documents/" + current_user["id"] + "/" + args["collection_name"] + ".json"
-    )
-    res = s3.get_object(Bucket=bucket_name, Key=file_name)
-    data = json.loads(res['Body'].read().decode("utf-8"))
+    file_name = args["collection_name"] + ".json"
+    blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+    container_client = blob_service_client.get_container_client(azure_container_name)
+    blob_client = container_client.get_blob_client(file_name)
+    res = blob_client.download_blob().readall()
+    data = json.loads(res)
     return make_response(jsonify({"data": data['texts']}), 200)
 
 
@@ -188,16 +195,17 @@ def delete_collection(current_user):
     if args["collection_name"] is None:
         return make_response(jsonify({"error": "Must provide collection name"}), 400)
 
-    file_name = (
-        "Documents/" + current_user["id"] + "/" + args["collection_name"] + ".json"
-    )
+    file_name = args["collection_name"] + ".json"
     if file_name not in current_user["my_files"]:
         return make_response(
             jsonify({"error": "User does not own this collection"}), 400
         )
 
     try:
-        s3.Object(bucket_name, file_name).delete()
+        blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+        container_client = blob_service_client.get_container_client(azure_container_name)
+        blob_client = container_client.get_blob_client(file_name)
+        blob_client.delete_blob(delete_snapshots="include")
     except Exception as e:
         print(e)
         return make_response(jsonify({"error": "Cannot remove collection"}), 400)
@@ -224,25 +232,24 @@ def add_collection(current_user):
     arr_as_list = arr.tolist()
     res["vectors"] = arr_as_list
     res["texts"] = payload["collection_list"]
-    file_name = (
-        "Documents/" + current_user["id"] + "/" + payload["collection_name"] + ".json"
-    )
-    if file_name in current_user['my_files']:
+    json_file_name = payload["collection_name"] + ".json"
+    json_file_path = "Documents/" + current_user["id"]
+    if json_file_name in current_user['my_files']:
         return make_response(
             jsonify({"error": "Collection name must be unique"}), 400
         )
 
     try:
-        s3.put_object(Bucket=bucket_name, Key=file_name, Body=json.dumps(res, indent=2, default=str))
+        upload_to_blob_storage(json_file_path, json_file_name, json.dumps(res, indent=2, default=str))
     except Exception as e:
         print(e)
         return make_response(jsonify({"error": "Cannot save the collection"}), 400)
     db = get_client()
     users = db["users"]
     if "my_files" in current_user:
-        current_user["my_files"].append(file_name)
+        current_user["my_files"].append(json_file_name)
     else:
-        current_user["my_files"] = [file_name]
+        current_user["my_files"] = [json_file_name]
     users.update_one(
         {"id": current_user["id"]}, {"$set": {"my_files": current_user["my_files"]}}
     )
@@ -284,14 +291,15 @@ def reset_context(current_user):
 @bots_routes.route("/chat", methods=["POST"])
 @cross_origin(origin='*')
 @user_token_required
-def chat(current_user):
+async def chat(current_user):
     payload = request.json
     if payload is None or payload["input"] is None:
         return make_response(jsonify({"error": "Must provide input key"}), 400)
     file_name = "Documents/" + current_user["id"] + "/" + payload["collection_name"] + ".json"
     if file_name not in current_user["my_files"]:
         return make_response(jsonify({"error": "User does't have this file"}), 400)
-    result = pool.submit(
-        asyncio.run, talk_bot(payload["input"], file_name, payload["relevance_score"])
-    ).result()
+    #result = pool.submit(
+    #    asyncio.run, talk_bot(payload["input"], file_name, payload["relevance_score"])
+    #).result()
+    result = await talk_bot(payload["input"], file_name, payload["relevance_score"])
     return make_response(jsonify({"data": result}), 200)
