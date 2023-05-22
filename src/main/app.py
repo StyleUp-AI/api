@@ -1,4 +1,3 @@
-from flask import Flask
 from src.main.config import app_instance
 
 flask_app = app_instance
