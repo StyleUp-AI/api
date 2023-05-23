@@ -13,5 +13,6 @@ dependencies = [
     "sentence-transformers==2.2.2",
     "pandas >= 2.0.1",
     "numpy",
-    "scikit-learn"
+    "scikit-learn",
+    "azure-storage-blob"
 ]

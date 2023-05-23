@@ -6,6 +6,7 @@ bcrypt==4.0.1
 pyjwt==2.7.0
 semantic-kernel
 sentence-transformers==2.2.2
+azure-storage-blob
 pandas
 scikit-learn
 numpy
