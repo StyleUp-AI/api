@@ -4,7 +4,6 @@ import json
 import csv
 import pandas as pd
 import numpy as np
-import asyncio, concurrent.futures
 import semantic_kernel as sk
 from semantic_kernel.connectors.ai.open_ai import (
     OpenAITextCompletion,
@@ -49,7 +48,6 @@ context = kernel.create_new_context()
 context["chat_history"] = ""
 
 chat_func = kernel.create_semantic_function(sk_prompt, max_tokens=200, temperature=0.8)
-pool = concurrent.futures.ThreadPoolExecutor()
 
 def upload_to_blob_storage(file_path, file_name, data):
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
