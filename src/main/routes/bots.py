@@ -4,6 +4,7 @@ import json
 import csv
 import pandas as pd
 import numpy as np
+import asyncio, concurrent.futures
 import semantic_kernel as sk
 from semantic_kernel.connectors.ai.open_ai import (
     OpenAITextCompletion,
@@ -29,6 +30,7 @@ def after_request(response):
     return response
 
 model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+pool = concurrent.futures.ThreadPoolExecutor()
 
 kernel = sk.Kernel()
 
@@ -127,6 +129,7 @@ async def talk_bot(user_input, file_name, relevance_score):
     max_index = np.argmax(res)
     max_value = np.max(res)
     if max_value >= relevance_score:
+        context["chat_history"] += f"\nUser:> {user_input}\nChatBot:> {data["texts"][max_index]}\n"
         return data["texts"][max_index]
 
     default_answer = await kernel.run_async(chat_func, input_vars=context.variables)
@@ -289,15 +292,15 @@ def reset_context(current_user):
 @bots_routes.route("/chat", methods=["POST"])
 @cross_origin(origin='*')
 @user_token_required
-async def chat(current_user):
+def chat(current_user):
     payload = request.json
     if payload is None or payload["input"] is None:
         return make_response(jsonify({"error": "Must provide input key"}), 400)
     file_name = "Documents/" + current_user["id"] + "/" + payload["collection_name"] + ".json"
     if file_name not in current_user["my_files"]:
         return make_response(jsonify({"error": "User does't have this file"}), 400)
-    #result = pool.submit(
-    #    asyncio.run, talk_bot(payload["input"], file_name, payload["relevance_score"])
-    #).result()
-    result = await talk_bot(payload["input"], file_name, payload["relevance_score"])
+    result = pool.submit(
+        asyncio.run, talk_bot(payload["input"], file_name, payload["relevance_score"])
+    ).result()
+    #result = await talk_bot(payload["input"], file_name, payload["relevance_score"])
     return make_response(jsonify({"data": result}), 200)
