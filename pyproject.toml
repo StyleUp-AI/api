@@ -3,7 +3,7 @@ name = "PokeChat"
 version = "0.0.1"
 # ...
 dependencies = [
-    "Flask == 2.0.2",
+    "Flask[async]",
     "Flask-Cors",
     "python-dotenv==1.0.0",
     "pymongo==4.3.3",
