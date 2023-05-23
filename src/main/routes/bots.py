@@ -122,8 +122,11 @@ async def talk_bot(user_input, file_name, relevance_score):
         print("\n\nExiting chat...")
         return ""
 
-    res = s3.get_object(Bucket=bucket_name, Key=file_name)
-    data = json.loads(res['Body'].read().decode("utf-8"))
+    blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+    container_client = blob_service_client.get_container_client(azure_container_name)
+    blob_client = container_client.get_blob_client(file_name)
+    res = blob_client.download_blob().readall()
+    data = json.loads(res)
     vectors_input = model.encode(user_input)
     res = cosine_similarity([vectors_input], data["vectors"])
     max_index = np.argmax(res)
