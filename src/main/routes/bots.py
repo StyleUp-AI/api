@@ -69,7 +69,7 @@ def reset_context(relevance_score):
         sk_prompt, max_tokens=200, temperature=relevance_score
     )
 
-def update_collection_from_file(file, file_name, file_extension, old_collection):
+def update_collection_from_file(file, file_name, file_extension, old_collection, current_user):
     file_path = "Tmp/" + current_user["id"] + "/" + file.filename
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     file.save(file_path)
@@ -106,7 +106,7 @@ def update_collection_from_file(file, file_name, file_extension, old_collection)
     os.remove(file_path)
 
 
-def add_collection_from_file(file, file_name, file_extension):
+def add_collection_from_file(file, file_name, file_extension, current_user):
     file_path = "Tmp/" + current_user["id"] + "/" + file.filename
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     file.save(file_path)
@@ -218,10 +218,11 @@ def get_collection(current_user):
     args = request.args
     if args["collection_name"] is None:
         return make_response(jsonify({"error": "Must provide collection name"}), 400)
+    file_path = "Documents/" + current_user["id"]
     file_name = args["collection_name"] + ".json"
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
     container_client = blob_service_client.get_container_client(azure_container_name)
-    blob_client = container_client.get_blob_client(file_name)
+    blob_client = container_client.get_blob_client(file_path + '/' + file_name)
     res = blob_client.download_blob().readall()
     data = json.loads(res)
     return make_response(jsonify({"data": data['texts']}), 200)
@@ -234,7 +235,7 @@ def delete_collection(current_user):
     args = request.args
     if args["collection_name"] is None:
         return make_response(jsonify({"error": "Must provide collection name"}), 400)
-
+    file_path = "Documents/" + current_user["id"]
     file_name = args["collection_name"] + ".json"
     if file_name not in current_user["my_files"]:
         return make_response(
@@ -244,7 +245,7 @@ def delete_collection(current_user):
     try:
         blob_service_client = BlobServiceClient.from_connection_string(connection_string)
         container_client = blob_service_client.get_container_client(azure_container_name)
-        blob_client = container_client.get_blob_client(file_name)
+        blob_client = container_client.get_blob_client(file_path + '/' + file_name)
         blob_client.delete_blob(delete_snapshots="include")
     except Exception as e:
         print(e)
@@ -315,7 +316,7 @@ def update_collection_batch(current_user):
                 ),
                 400,
             )
-        update_collection_from_file(file, file_name, file_extension, old_collection)
+        update_collection_from_file(file, file_name, file_extension, old_collection, current_user)
 
 
 @bots_routes.route("/add_collection_batch", methods=["POST"])
@@ -337,7 +338,7 @@ def add_collection_batch(current_user):
                 ),
                 400,
             )
-        add_collection_from_file(file, file_name, file_extension)
+        add_collection_from_file(file, file_name, file_extension, current_user)
     return make_response(jsonify({"data": "New collection added"}), 201)
 
 
