@@ -1,7 +1,7 @@
 from src.main.config import app_instance
 
-flask_app = app_instance
+app = app_instance
 
-@flask_app.route("/")
+@app.route("/")
 def home_route():
     return "Welcome to poke chat"
