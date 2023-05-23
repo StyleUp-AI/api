@@ -297,7 +297,7 @@ def chat(current_user):
     payload = request.json
     if payload is None or payload["input"] is None:
         return make_response(jsonify({"error": "Must provide input key"}), 400)
-    file_name = "Documents/" + current_user["id"] + "/" + payload["collection_name"] + ".json"
+    file_name = payload["collection_name"] + ".json"
     if file_name not in current_user["my_files"]:
         return make_response(jsonify({"error": "User does't have this file"}), 400)
     result = pool.submit(
