@@ -11,7 +11,6 @@ dependencies = [
     "pyjwt==2.7.0",
     "semantic-kernel",
     "sentence-transformers==2.2.2",
-    "asyncio==3.4.3",
     "pandas >= 2.0.1",
     "numpy",
     "scikit-learn"

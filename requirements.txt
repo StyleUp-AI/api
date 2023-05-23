@@ -6,7 +6,6 @@ bcrypt==4.0.1
 pyjwt==2.7.0
 semantic-kernel
 sentence-transformers==2.2.2
-asyncio==3.4.3
 pandas
 scikit-learn
 numpy
