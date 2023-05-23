@@ -129,7 +129,8 @@ async def talk_bot(user_input, file_name, relevance_score):
     max_index = np.argmax(res)
     max_value = np.max(res)
     if max_value >= relevance_score:
-        context["chat_history"] += f"\nUser:> {user_input}\nChatBot:> {data["texts"][max_index]}\n"
+        bot_answer = data["texts"][max_index]
+        context["chat_history"] += f"\nUser:> {user_input}\nChatBot:> {bot_answer}\n"
         return data["texts"][max_index]
 
     default_answer = await kernel.run_async(chat_func, input_vars=context.variables)
