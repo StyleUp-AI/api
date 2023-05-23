@@ -52,9 +52,10 @@ context["chat_history"] = ""
 chat_func = kernel.create_semantic_function(sk_prompt, max_tokens=200, temperature=0.8)
 
 def upload_to_blob_storage(file_path, file_name, data):
+    destination = file_path + '/' + file_name
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
-    blob_client = blob_service_client.get_blob_client(container=azure_container_name, blob=file_name)
-    blob_client.upload_blob(data)
+    blob_client = blob_service_client.get_blob_client(container=azure_container_name, blob=destination)
+    blob_client.upload_blob(data, overwrite=True)
 
 def reset_context(relevance_score):
     global context
@@ -67,6 +68,42 @@ def reset_context(relevance_score):
     chat_func = kernel.create_semantic_function(
         sk_prompt, max_tokens=200, temperature=relevance_score
     )
+
+def update_collection_from_file(file, file_name, file_extension, old_collection):
+    file_path = "Tmp/" + current_user["id"] + "/" + file.filename
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    file.save(file_path)
+    data = []
+    if file_extension == "csv":
+        with open(file_path) as f:
+            csv_file = csv.reader(f)
+            for row in csv_file:
+                data.append(row.split(","))
+    else:
+        with open(file_path) as f:
+            excel_file = pd.read_excel(f, header=None)
+            for column in excel_file.columns:
+                column_values = excel_file[column].tolist()
+                data.append(column_values)
+
+    res = {}
+    vectors = model.encode(data)
+    arr = np.array(vectors)
+    arr_as_list = arr.tolist()
+    res["vectors"] = arr_as_list
+    res["texts"] = data
+    json_file_path = "Documents/" + current_user["id"]
+    json_file_name = old_collection + ".json"
+    try:
+        upload_to_blob_storage(json_file_path, json_file_name, json.dumps(res, indent=2, default=str))
+    except Exception as e:
+        print(e)
+        raise
+
+    users.update_one(
+        {"id": current_user["id"]}, {"$set": {"my_files": current_user["my_files"]}}
+    )
+    os.remove(file_path)
 
 
 def add_collection_from_file(file, file_name, file_extension):
@@ -157,12 +194,10 @@ def update_collection(current_user):
     arr_as_list = arr.tolist()
     res["vectors"] = arr_as_list
     res["texts"] = payload["collection_list"]
+    file_path = "Documents/" + current_user["id"]
     file_name = payload["collection_name"] + ".json"
     try:
-        blob_service_client = BlobServiceClient.from_connection_string(connection_string)
-        container_client = blob_service_client.get_container_client(azure_container_name)
-        blob_client = container_client.get_blob_client(file_name)
-        blob_client.upload_blob(json.dumps(res, indent=2, default=str), overwrite=True)
+        upload_to_blob_storage(file_path, file_name, json.dumps(res, indent=2, default=str))
     except Exception as e:
         print(e)
         return make_response(jsonify({"error": "Cannot update the collection"}), 400)
@@ -259,6 +294,28 @@ def add_collection(current_user):
         {"id": current_user["id"]}, {"$set": {"my_files": current_user["my_files"]}}
     )
     return make_response(jsonify({"data": "New collection added"}), 201)
+
+@bots_routes.route("/update_collection_batch", methods=["PUT"])
+@cross_origin(origin='*')
+@user_token_required
+def update_collection_batch(current_user):
+    payload = request.json
+    if "files" not in request.files:
+        return make_response(jsonify({"error": "File must provide"}), 400)
+    files = request.files["files"]
+    old_collection = payload['collection_name']
+    db = get_client()
+    users = db["users"]
+    for i, file in enumerate(files):
+        (file_name, file_extension) = os.path.splitext(file.filename)
+        if file_extension != "csv" or file_extension != "xlsx":
+            return make_response(
+                jsonify(
+                    {"error: " "File: " + file_name + " is not valid csv or excel file"}
+                ),
+                400,
+            )
+        update_collection_from_file(file, file_name, file_extension, old_collection)
 
 
 @bots_routes.route("/add_collection_batch", methods=["POST"])
