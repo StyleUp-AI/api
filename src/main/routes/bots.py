@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from sentence_transformers import SentenceTransformer, util
 from bson.objectid import ObjectId
 from sklearn.metrics.pairwise import cosine_similarity
-from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_account_key, azure_account_name, azure_container_name
+from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_container_name
 
 bots_routes = Blueprint("bots_routes", __name__)
 @bots_routes.after_request

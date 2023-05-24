@@ -5,12 +5,13 @@ import os
 import uuid
 import random
 import smtplib, ssl
+from azure.storage.blob import BlobServiceClient
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from flask import Blueprint, request, jsonify, make_response
 from flask_cors import cross_origin
 from datetime import datetime, timedelta
-from src.main.routes import get_client, user_token_required, html_template
+from src.main.routes import get_client, user_token_required, html_template, email_client, connection_string, azure_container_name
 from werkzeug.security import check_password_hash, generate_password_hash
 
 user_routes = Blueprint("user_routes", __name__)
@@ -116,7 +117,12 @@ def delete_user(current_user):
     api_key = db["api_keys"]
     for item in current_user["my_files"]:
         try:
-            s3.Object(bucket_name, item).delete()
+            file_path = "Documents/" + current_user["id"]
+            file_name = item + ".json"
+            blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+            container_client = blob_service_client.get_container_client(azure_container_name)
+            blob_client = container_client.get_blob_client(file_path + '/' + file_name)
+            blob_client.delete_blob(delete_snapshots="include")
         except Exception as e:
             print(e)
             return make_response(jsonify({"error": "Cannot delete user"}), 400)
@@ -124,6 +130,35 @@ def delete_user(current_user):
     users.delete_one({"id": current_user["id"]})
     return make_response(jsonify({"data": "User delete successfully!"}), 200)
 
+@user_routes.route("/add_api_key", methods=["POST"])
+@cross_origin(origin='*')
+@user_token_required
+def add_api_key(current_user):
+    db = get_client()
+    api_keys = db["api_keys"]
+    api_keys.insert_one({"key": secrets.token_urlsafe(32), "user_id": current_user['id']})
+    return make_response(jsonify({"data": "New API Key Added!"}), 201)
+
+@user_routes.route("/get_api_keys", methods=["GET"])
+@cross_origin(origin='*')
+@user_token_required
+def get_api_keys(current_user):
+    db = get_client()
+    api_keys = db["api_keys"]
+    res = api_keys.find({"user_id": current_user['id']})
+    return make_response(jsonify({"data": res}), 200)
+
+@user_routes.route("/delete_api_key", methods=["DELETE"])
+@cross_origin(origin='*')
+@user_token_required
+def delete_api_key(current_user):
+    payload = request.json
+    if not payload or payload['key']:
+        return make_response(jsonify({"error": "Must provide api key"}), 400)
+    db = get_client()
+    api_keys = db["api_keys"]
+    res = api_keys.delete_one({"key": payload['key'], 'user_id': current_user['id']})
+    return make_response(jsonify({"data": 'Api key deleted'}), 200)
 
 @user_routes.route("/signin", methods=["POST"])
 @cross_origin(origin='*')

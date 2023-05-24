@@ -4,7 +4,7 @@ import jwt
 from urllib.parse import quote_plus
 from functools import wraps
 from flask import Flask, request, jsonify, make_response
-
+from azure.communication.email import EmailClient
 from pymongo.mongo_client import MongoClient
 
 user_name = quote_plus(os.environ.get("USER_NAME"))
@@ -14,6 +14,7 @@ connection_string = os.environ.get("AZURE_CONNECTION_STRING")
 azure_account_key = os.environ.get("AZURE_ACCOUNT_KEY")
 azure_account_name = os.environ.get("AZURE_ACCOUNT_NAME")
 azure_container_name = os.environ.get("AZURE_CONTAINER")
+azure_email_connection_string = os.environ.get("AZURE_EMAIL_CONNECTION_STRING")
 
 uri = (
     "mongodb+srv://"
@@ -26,6 +27,7 @@ uri = (
 )
 
 mongo_client = MongoClient(uri, tlsCAFile=certifi.where())
+email_client = EmailClient.from_connection_string(azure_email_connection_string)
 
 sk_prompt = """
 ChatBot can have a conversation with you about any topic.
