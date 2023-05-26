@@ -19,6 +19,7 @@ from sentence_transformers import SentenceTransformer, util
 from bson.objectid import ObjectId
 from sklearn.metrics.pairwise import cosine_similarity
 from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_container_name
+from src.main.utils import train_ml_model
 
 bots_routes = Blueprint("bots_routes", __name__)
 @bots_routes.after_request
@@ -218,6 +219,8 @@ def get_collection(current_user):
     args = request.args
     if args["collection_name"] is None:
         return make_response(jsonify({"error": "Must provide collection name"}), 400)
+    if args["collection_name"] + '.json' not in current_user['my_files']:
+        return make_response(jsonify({"error": "User doens't own this collection"}), 400)
     file_path = "Documents/" + current_user["id"]
     file_name = args["collection_name"] + ".json"
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
@@ -257,6 +260,28 @@ def delete_collection(current_user):
     users.update_one({'id': current_user['id']}, {'$set': {'my_files': current_user['my_files']}})
     return make_response(jsonify({"data": "File removed successfully"}), 200)
 
+@bots_routes.route("/train_collection", methods=["POST"])
+@cross_origin(origin='*')
+@user_token_required
+def train_collection(current_user):
+    payload = request.json
+    if payload["collection_name"] is None:
+        return make_response(
+            jsonify({"error": "Collection name must not be none"}), 400
+        )
+    if payload["collection_name"] + '.json' not in current_user['my_files']:
+        return make_response(jsonify({"error": "User doens't own this collection"}), 400)
+    file_path = "Documents/" + current_user["id"]
+    file_name = payload["collection_name"] + ".json"
+    blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+    container_client = blob_service_client.get_container_client(azure_container_name)
+    blob_client = container_client.get_blob_client(file_path + '/' + file_name)
+    res = blob_client.download_blob().readall()
+    data = json.loads(res)
+    res = train_ml_model(data['texts'])
+    print(res)
+    return make_response(jsonify({"data": res}), 200)
+    
 
 @bots_routes.route("/add_collection", methods=["POST"])
 @cross_origin(origin='*')
@@ -317,6 +342,7 @@ def update_collection_batch(current_user):
                 400,
             )
         update_collection_from_file(file, file_name, file_extension, old_collection, current_user)
+    return make_response(jsonify({"data": "Update collection success!"}), 200)
 
 
 @bots_routes.route("/add_collection_batch", methods=["POST"])
@@ -344,7 +370,7 @@ def add_collection_batch(current_user):
 
 @bots_routes.route("/reset_context", methods=["POST"])
 @cross_origin(origin='*')
-@user_token_required
+@bot_api_key_required
 def reset_context(current_user):
     payload = request.json
     reset_context(payload["relevance_score"])
@@ -353,7 +379,7 @@ def reset_context(current_user):
 
 @bots_routes.route("/chat", methods=["POST"])
 @cross_origin(origin='*')
-@user_token_required
+@bot_api_key_required
 def chat(current_user):
     payload = request.json
     if payload is None or payload["input"] is None:

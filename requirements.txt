@@ -10,3 +10,4 @@ azure-storage-blob
 pandas
 scikit-learn
 numpy
+tensorflow

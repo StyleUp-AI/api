@@ -14,5 +14,6 @@ dependencies = [
     "pandas >= 2.0.1",
     "numpy",
     "scikit-learn",
-    "azure-storage-blob"
+    "azure-storage-blob",
+    "tensorflow"
 ]
