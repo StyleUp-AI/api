@@ -15,6 +15,5 @@ dependencies = [
     "numpy",
     "scikit-learn",
     "azure-storage-blob",
-    "azure-communication-email",
     "tensorflow"
 ]

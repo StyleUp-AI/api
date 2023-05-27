@@ -7,7 +7,6 @@ pyjwt==2.7.0
 semantic-kernel
 sentence-transformers==2.2.2
 azure-storage-blob
-azure-communication-email
 pandas
 scikit-learn
 numpy

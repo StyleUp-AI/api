@@ -11,7 +11,7 @@ from email.mime.multipart import MIMEMultipart
 from flask import Blueprint, request, jsonify, make_response
 from flask_cors import cross_origin
 from datetime import datetime, timedelta
-from src.main.routes import get_client, user_token_required, html_template, email_client, connection_string, azure_container_name
+from src.main.routes import get_client, user_token_required, html_template, connection_string, azure_container_name
 from werkzeug.security import check_password_hash, generate_password_hash
 
 user_routes = Blueprint("user_routes", __name__)
