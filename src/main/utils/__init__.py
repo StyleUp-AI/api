@@ -3,6 +3,7 @@ import string
 import collections
 import random
 import math
+import json
 from matplotlib import pylab
 import numpy as np
 import tensorflow as tf
@@ -13,7 +14,7 @@ from tensorflow.keras.layers import Dense, Embedding, GlobalAveragePooling1D
 from tensorflow.keras.layers import TextVectorization
 data_index = 0
 
-def extract_words(input):
+async def extract_words(input):
     words = list()
     for item in input:
         q_words = item.split()
@@ -21,7 +22,7 @@ def extract_words(input):
             words.append(word)
     return words
 
-def build_dataset(words, vocabulary_size):
+async def build_dataset(words, vocabulary_size):
     count = [['UNK', -1]]
     count.extend(collections.Counter(words).most_common(vocabulary_size - 1))
     dictionary = dict()
@@ -40,7 +41,7 @@ def build_dataset(words, vocabulary_size):
     reverse_dictionary = dict(zip(dictionary.values(), dictionary.keys()))
     return data, count, dictionary, reverse_dictionary
 
-def generate_batch(batch_size, num_skips, skip_window, data):
+async def generate_batch(batch_size, num_skips, skip_window, data):
     global data_index
     assert batch_size % num_skips == 0
     assert num_skips <= 2 * skip_window
@@ -66,7 +67,7 @@ def generate_batch(batch_size, num_skips, skip_window, data):
 
 final_words = []
 # Create a custom standardization function to strip HTML break tags '<br />'.
-def train_ml_model(input_data) -> string:
+async def train_ml_model(input_data) -> string:
     global final_words
     # Data preprocessing
     input_data = tf.strings.lower(input_data)
@@ -75,12 +76,12 @@ def train_ml_model(input_data) -> string:
                                     '[%s]' % re.escape(string.punctuation), '')
     
     vocabulary_size = 50000
-    words = extract_words(input_data.numpy())
-    data, count, dictionary, reverse_dictionary = build_dataset(words, vocabulary_size)
+    words = await extract_words(input_data.numpy())
+    data, count, dictionary, reverse_dictionary = await build_dataset(words, vocabulary_size)
     del words
     for num_skips, skip_window in [(2, 1), (4, 2)]:
         data_index = 0
-        batch, labels = generate_batch(batch_size=8, num_skips=num_skips, skip_window=skip_window, data=data)
+        batch, labels = await generate_batch(batch_size=8, num_skips=num_skips, skip_window=skip_window, data=data)
 
     batch_size = 128
     embedding_size = 128 
@@ -143,7 +144,7 @@ def train_ml_model(input_data) -> string:
         print('Initialized')
         average_loss = 0
         for step in range(num_steps):
-            batch_data, batch_labels = generate_batch(
+            batch_data, batch_labels = await generate_batch(
             batch_size, num_skips, skip_window, data)
             feed_dict = {train_dataset : batch_data, train_labels : batch_labels}
             _, l = session.run([optimizer, loss], feed_dict=feed_dict)
@@ -180,26 +181,4 @@ def train_ml_model(input_data) -> string:
 
     tsne = TSNE(perplexity=30, n_components=2, init='pca', n_iter=5000)
     two_d_embeddings = tsne.fit_transform(final_embeddings[1:num_points+1, :])
-    def plot(embeddings, labels):
-        assert embeddings.shape[0] >= len(labels), 'More labels than embeddings'
-        pylab.figure(figsize=(15,15))  # in inches
-        for i, label in enumerate(labels):
-            x, y = embeddings[i,:]
-            pylab.scatter(x, y)
-            pylab.annotate(label, xy=(x, y), xytext=(5, 2), textcoords='offset points',
-                        ha='right', va='bottom')
-        pylab.show()
-
-    for i in range(1, num_points+1):
-         if i in reverse_dictionary:
-            final_words.append(reverse_dictionary[i])
-    plot(two_d_embeddings, final_words)
-    return ""
-
-train_ml_model([
-        "Shuyang Zang's phone number is 6479201171",
-        "Shuyang Zang is a very beautiful boy",
-        "Shuyang Zang is a good person",
-        "Mengjiao Wang is Shuyang Zang's wife",
-        "Shuyang Zang is good at programming"
-    ])
+    return two_d_embeddings

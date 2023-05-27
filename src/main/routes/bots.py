@@ -1,4 +1,4 @@
-import uuid
+import asyncio
 import os
 import json
 import csv
@@ -278,9 +278,21 @@ def train_collection(current_user):
     blob_client = container_client.get_blob_client(file_path + '/' + file_name)
     res = blob_client.download_blob().readall()
     data = json.loads(res)
-    res = train_ml_model(data['texts'])
-    print(res)
-    return make_response(jsonify({"data": res}), 200)
+    async def training_process(current_user, data):
+        _res = await asyncio.ensure_future(train_ml_model(data['texts']))
+        print(_res)
+        print('Model Training finished')
+        embedding_vectors = np.array(_res)
+        embedding_vectors = json.dumps(list(list(str(r)) for r in embedding_vectors))
+        model_file_path = "Models/" + current_user["id"]
+        model_file_name = payload["collection_name"] + ".tsv"
+        try:
+            upload_to_blob_storage(model_file_path, model_file_name, embedding_vectors)
+        except Exception:
+            raise
+        # send email
+    asyncio.run(training_process(current_user, data))
+    return make_response(jsonify({"data": "Model training request submitted"}), 200)
     
 
 @bots_routes.route("/add_collection", methods=["POST"])
@@ -330,9 +342,7 @@ def update_collection_batch(current_user):
         return make_response(jsonify({"error": "File must provide"}), 400)
     files = request.files["files"]
     old_collection = payload['collection_name']
-    db = get_client()
-    users = db["users"]
-    for i, file in enumerate(files):
+    for file in files:
         (file_name, file_extension) = os.path.splitext(file.filename)
         if file_extension != "csv" or file_extension != "xlsx":
             return make_response(
