@@ -218,7 +218,7 @@ def get_collection(current_user):
     args = request.args
     if args["collection_name"] is None:
         return make_response(jsonify({"error": "Must provide collection name"}), 400)
-    if args["collection_name"] + '.json' not in current_user['my_files']:
+    if 'my_files' not in current_user or args["collection_name"] + '.json' not in current_user['my_files']:
         return make_response(jsonify({"error": "User doens't own this collection"}), 400)
     file_path = "Documents/" + current_user["id"]
     file_name = args["collection_name"] + ".json"
@@ -239,7 +239,7 @@ def delete_collection(current_user):
         return make_response(jsonify({"error": "Must provide collection name"}), 400)
     file_path = "Documents/" + current_user["id"]
     file_name = args["collection_name"] + ".json"
-    if file_name not in current_user["my_files"]:
+    if 'my_files' not in current_user or file_name not in current_user["my_files"]:
         return make_response(
             jsonify({"error": "User does not own this collection"}), 400
         )
@@ -268,7 +268,7 @@ def train_collection(current_user):
         return make_response(
             jsonify({"error": "Collection name must not be none"}), 400
         )
-    if payload["collection_name"] + '.json' not in current_user['my_files']:
+    if 'my_files' not in current_user or payload["collection_name"] + '.json' not in current_user['my_files']:
         return make_response(jsonify({"error": "User doens't own this collection"}), 400)
     file_path = "Documents/" + current_user["id"]
     file_name = payload["collection_name"] + ".json"
@@ -311,7 +311,7 @@ def add_collection(current_user):
     res["texts"] = payload["collection_list"]
     json_file_name = payload["collection_name"] + ".json"
     json_file_path = "Documents/" + current_user["id"]
-    if json_file_name in current_user['my_files']:
+    if 'my_file' in current_user and json_file_name in current_user['my_files']:
         return make_response(
             jsonify({"error": "Collection name must be unique"}), 400
         )
@@ -394,7 +394,7 @@ def chat(current_user):
     if payload is None or payload["input"] is None:
         return make_response(jsonify({"error": "Must provide input key"}), 400)
     file_name = payload["collection_name"] + ".json"
-    if file_name not in current_user["my_files"]:
+    if 'my_files' not in current_user or file_name not in current_user["my_files"]:
         return make_response(jsonify({"error": "User does't have this file"}), 400)
     result = pool.submit(
         asyncio.run, talk_bot(payload["input"], file_name, payload["relevance_score"])
