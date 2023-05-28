@@ -206,6 +206,8 @@ def update_collection(current_user):
 @cross_origin(origin='*')
 @user_token_required
 def get_collections(current_user):
+    if current_user['my_files'] is None:
+        return make_response(jsonify({"data": []}), 200)
     return make_response(jsonify({"data": current_user["my_files"]}), 200)
 
 
