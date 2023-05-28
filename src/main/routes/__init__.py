@@ -59,7 +59,7 @@ def user_token_required(f):
         if "x-access-token" in request.headers:
             token = request.headers["x-access-token"]
         if not token:
-            return jsonify({"message": "Token is missing !!"}), 401
+            return jsonify({"error": "Token is missing !!"}), 401
 
         db = get_client()
         users = db["users"]
@@ -68,7 +68,7 @@ def user_token_required(f):
             current_user = users.find_one({"id": data["user_id"]})
         except Exception as e:
             print(e)
-            return jsonify({"message": "Token is invalid !!"}), 401
+            return jsonify({"error": "Token is invalid !!"}), 401
         return f(current_user, *args, **kwargs)
 
     return decorated
@@ -81,7 +81,7 @@ def bot_api_key_required(f):
         if "bot-api-key" in request.headers:
             token = request.headers["bot-api-key"]
         if not token:
-            return jsonify({"message": "Api Key is missing !!"}), 401
+            return jsonify({"error": "Api Key is missing !!"}), 401
 
         db = get_client()
         keys = db["api_keys"]
@@ -91,7 +91,7 @@ def bot_api_key_required(f):
             current_user = users.find_one({"id": api_key["user_id"]})
         except Exception as e:
             print(e)
-            return jsonify({"message": "API Key is invalid !!"}), 401
+            return jsonify({"error": "API Key is invalid !!"}), 401
         return f(current_user, *args, **kwargs)
 
     return decorated

@@ -383,7 +383,7 @@ def add_collection_batch(current_user):
 def reset_context(current_user):
     payload = request.json
     reset_context(payload["relevance_score"])
-    return make_response(jsonify({"message": "Context refreshed"}), 200)
+    return make_response(jsonify({"data": "Context refreshed"}), 200)
 
 
 @bots_routes.route("/chat", methods=["POST"])
