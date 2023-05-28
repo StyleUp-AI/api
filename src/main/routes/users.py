@@ -30,9 +30,9 @@ def signup():
     db = get_client()
     users = db["users"]
     api_key = db["api_keys"]
-    otp = db["otp"]
-    if otp.find_one({"email": new_user["email"], "verified": "Yes"}) is None:
-        return make_response(jsonify({"error": "Email: " + new_user["email"] + " not verified"}), 400)
+   # otp = db["otp"]
+   # if otp.find_one({"email": new_user["email"], "verified": "Yes"}) is None:
+   #    return make_response(jsonify({"error": "Email: " + new_user["email"] + " not verified"}), 400)
     old_user = users.find_one({"email": new_user["email"]})
     if old_user:
         return make_response(
