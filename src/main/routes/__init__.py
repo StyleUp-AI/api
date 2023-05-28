@@ -3,8 +3,7 @@ import os
 import jwt
 from urllib.parse import quote_plus
 from functools import wraps
-from flask import Flask, request, jsonify, make_response
-#from azure.communication.email import EmailClient
+from flask import request, jsonify
 from pymongo.mongo_client import MongoClient
 
 user_name = quote_plus(os.environ.get("USER_NAME"))

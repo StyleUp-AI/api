@@ -13,10 +13,7 @@ from semantic_kernel.connectors.ai.open_ai import (
 from azure.storage.blob import BlobServiceClient
 from flask import Blueprint, request, jsonify, make_response
 from flask_cors import cross_origin
-from typing import List
-from datetime import datetime, timezone
-from sentence_transformers import SentenceTransformer, util
-from bson.objectid import ObjectId
+from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_container_name
 from src.main.utils import train_ml_model
