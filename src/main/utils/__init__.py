@@ -3,15 +3,10 @@ import string
 import collections
 import random
 import math
-import json
-from matplotlib import pylab
 import numpy as np
 import tensorflow as tf
 from sklearn.manifold import TSNE
 
-from tensorflow.keras import Sequential
-from tensorflow.keras.layers import Dense, Embedding, GlobalAveragePooling1D
-from tensorflow.keras.layers import TextVectorization
 data_index = 0
 
 async def extract_words(input):
