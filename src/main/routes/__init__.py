@@ -27,7 +27,7 @@ uri = (
 
 mongo_client = MongoClient(uri, tlsCAFile=certifi.where())
 #email_client = EmailClient.from_connection_string(azure_email_connection_string)
-
+user_sessions = {}
 sk_prompt = """
 ChatBot can have a conversation with you about any topic.
 It can give explicit instructions or say 'I don't know' if
@@ -78,7 +78,6 @@ def bot_api_key_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         token = None
-        print(request.headers)
         if "bot-api-key" in request.headers:
             token = request.headers["bot-api-key"]
         if not token:

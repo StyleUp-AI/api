@@ -15,7 +15,7 @@ from flask import Blueprint, request, jsonify, make_response
 from flask_cors import cross_origin
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
-from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_container_name
+from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_container_name, user_sessions
 from src.main.utils import train_ml_model
 
 bots_routes = Blueprint("bots_routes", __name__)
@@ -44,21 +44,15 @@ kernel.add_text_embedding_generation_service(
 kernel.register_memory_store(memory_store=sk.memory.VolatileMemoryStore())
 kernel.import_skill(sk.core_skills.TextMemorySkill())
 
-context = kernel.create_new_context()
-context["chat_history"] = ""
-
-chat_func = kernel.create_semantic_function(sk_prompt, max_tokens=200, temperature=0.8)
-
 def upload_to_blob_storage(file_path, file_name, data):
     destination = file_path + '/' + file_name
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
     blob_client = blob_service_client.get_blob_client(container=azure_container_name, blob=destination)
     blob_client.upload_blob(data, overwrite=True)
 
-def reset_context(relevance_score=0.8):
-    global context
-    global chat_func
+def reset_context_helper(current_user, relevance_score=0.8):
     global kernel
+    global user_sessions
 
     context = kernel.create_new_context()
     context["chat_history"] = ""
@@ -66,6 +60,11 @@ def reset_context(relevance_score=0.8):
     chat_func = kernel.create_semantic_function(
         sk_prompt, max_tokens=200, temperature=relevance_score
     )
+
+    user_sessions[current_user['id']] = {
+        'context': context,
+        'chat_func': chat_func
+    }
 
 def update_collection_from_file(file, file_name, file_extension, old_collection, current_user):
     file_path = "Tmp/" + current_user["id"] + "/" + file.filename
@@ -144,10 +143,11 @@ def add_collection_from_file(file, file_name, file_extension, current_user):
     os.remove(file_path)
 
 
-async def talk_bot(user_input, file_name, relevance_score):
-    global context
-    global chat_func
+async def talk_bot(user_input, file_name, relevance_score, current_user):
+    global user_sessions
     global kernel
+    context = user_sessions[current_user['id']['context']]
+    chat_func = user_sessions[current_user['id']['context']]
     try:
         context["user_input"] = user_input
     except KeyboardInterrupt:
@@ -175,7 +175,6 @@ async def talk_bot(user_input, file_name, relevance_score):
     context["chat_history"] += f"\nUser:> {user_input}\nChatBot:> {default_answer}\n"
 
     return default_answer.result
-
 
 @bots_routes.route("/update_collection", methods=["PUT"])
 @cross_origin(origin='*')
@@ -381,8 +380,7 @@ def add_collection_batch(current_user):
 @cross_origin(origin='*')
 @bot_api_key_required
 def reset_context(current_user):
-    payload = request.json
-    reset_context(payload["relevance_score"])
+    reset_context_helper(current_user)
     return make_response(jsonify({"data": "Context refreshed"}), 200)
 
 
@@ -398,7 +396,7 @@ def chat(current_user):
         return make_response(jsonify({"error": "User does't have this file"}), 400)
     file_name = "Documents/" + current_user["id"] + '/' + file_name
     result = pool.submit(
-        asyncio.run, talk_bot(payload["input"], file_name, payload["relevance_score"])
+        asyncio.run, talk_bot(payload["input"], file_name, payload["relevance_score"], current_user)
     ).result()
     #result = await talk_bot(payload["input"], file_name, payload["relevance_score"])
     return make_response(jsonify({"data": result}), 200)
