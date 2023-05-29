@@ -117,16 +117,13 @@ def delete_user(current_user):
     api_key = db["api_keys"]
     for item in current_user["my_files"]:
         try:
-            file_path = "Documents/" + current_user["id"]
-            file_name = item + ".json"
             blob_service_client = BlobServiceClient.from_connection_string(connection_string)
             container_client = blob_service_client.get_container_client(azure_container_name)
-            blob_client = container_client.get_blob_client(file_path + '/' + file_name)
+            blob_client = container_client.get_blob_client(item)
             blob_client.delete_blob(delete_snapshots="include")
         except Exception as e:
             print(e)
-            return make_response(jsonify({"error": "Cannot delete user"}), 400)
-    api_keys.delete_many({"user_id": current_user["id"]})
+    api_key.delete_many({"user_id": current_user["id"]})
     users.delete_one({"id": current_user["id"]})
     return make_response(jsonify({"data": "User delete successfully!"}), 200)
 
