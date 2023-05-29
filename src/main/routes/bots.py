@@ -146,7 +146,9 @@ def add_collection_from_file(file, file_name, file_extension, current_user):
 async def talk_bot(user_input, file_name, relevance_score, current_user):
     global user_sessions
     global kernel
-    print(user_sessions)
+
+    if current_user['id'] not in user_sessions:
+        reset_context_helper(current_user)
     context = user_sessions[current_user['id']]['context']
     chat_func = user_sessions[current_user['id']]['chat_func']
     try:
@@ -164,14 +166,15 @@ async def talk_bot(user_input, file_name, relevance_score, current_user):
     res = blob_client.download_blob().readall()
     data = json.loads(res)
     vectors_input = model.encode(user_input)
-    res = cosine_similarity([vectors_input], data["vectors"])
-    max_index = np.argmax(res)
-    max_value = np.max(res)
-    if max_value >= relevance_score:
-        bot_answer = data["texts"][max_index]
-        context["chat_history"] += f"\nUser:> {user_input}\nChatBot:> {bot_answer}\n"
-        user_sessions[current_user['id']]['context'] = context
-        return data["texts"][max_index]
+    if "vectors" in data and len(data["vectors"]) > 0:
+        output = cosine_similarity([vectors_input], data["vectors"])
+        max_index = np.argmax(output)
+        max_value = np.max(output)
+        if max_value >= relevance_score:
+            bot_answer = data["texts"][max_index]
+            context["chat_history"] += f"\nUser:> {user_input}\nChatBot:> {bot_answer}\n"
+            user_sessions[current_user['id']]['context'] = context
+            return data["texts"][max_index]
 
     default_answer = await kernel.run_async(chat_func, input_context=context)
     context["chat_history"] += f"\nUser:> {user_input}\nChatBot:> {default_answer}\n"
