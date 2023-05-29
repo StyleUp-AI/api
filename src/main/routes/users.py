@@ -145,7 +145,8 @@ def add_api_key(current_user):
 def get_api_keys(current_user):
     db = get_client()
     api_keys = db["api_keys"]
-    res = api_keys.find({"user_id": current_user['id']})
+    res = list(api_keys.find({"user_id": current_user['id']}))
+    res = [r['key'] for r in res]
     return make_response(jsonify({"data": res}), 200)
 
 @user_routes.route("/delete_api_key", methods=["DELETE"])
