@@ -78,6 +78,7 @@ def bot_api_key_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         token = None
+        print(request.headers)
         if "bot-api-key" in request.headers:
             token = request.headers["bot-api-key"]
         if not token:
@@ -87,7 +88,7 @@ def bot_api_key_required(f):
         keys = db["api_keys"]
         users = db["users"]
         try:
-            api_key = keys.find_one({"key": key})
+            api_key = keys.find_one({"key": token})
             current_user = users.find_one({"id": api_key["user_id"]})
         except Exception as e:
             print(e)

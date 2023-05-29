@@ -396,6 +396,7 @@ def chat(current_user):
     file_name = payload["collection_name"] + ".json"
     if 'my_files' not in current_user or file_name not in current_user["my_files"]:
         return make_response(jsonify({"error": "User does't have this file"}), 400)
+    file_name = "Documents/" + current_user["id"] + '/' + file_name
     result = pool.submit(
         asyncio.run, talk_bot(payload["input"], file_name, payload["relevance_score"])
     ).result()
