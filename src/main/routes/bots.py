@@ -146,8 +146,9 @@ def add_collection_from_file(file, file_name, file_extension, current_user):
 async def talk_bot(user_input, file_name, relevance_score, current_user):
     global user_sessions
     global kernel
-    context = user_sessions[current_user['id']['context']]
-    chat_func = user_sessions[current_user['id']['context']]
+    print(user_sessions)
+    context = user_sessions[current_user['id']]['context']
+    chat_func = user_sessions[current_user['id']]['chat_func']
     try:
         context["user_input"] = user_input
     except KeyboardInterrupt:
@@ -169,11 +170,12 @@ async def talk_bot(user_input, file_name, relevance_score, current_user):
     if max_value >= relevance_score:
         bot_answer = data["texts"][max_index]
         context["chat_history"] += f"\nUser:> {user_input}\nChatBot:> {bot_answer}\n"
+        user_sessions[current_user['id']]['context'] = context
         return data["texts"][max_index]
 
     default_answer = await kernel.run_async(chat_func, input_context=context)
     context["chat_history"] += f"\nUser:> {user_input}\nChatBot:> {default_answer}\n"
-
+    user_sessions[current_user['id']]['context'] = context
     return default_answer.result
 
 @bots_routes.route("/update_collection", methods=["PUT"])
