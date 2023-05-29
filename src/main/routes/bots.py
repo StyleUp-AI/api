@@ -55,7 +55,7 @@ def upload_to_blob_storage(file_path, file_name, data):
     blob_client = blob_service_client.get_blob_client(container=azure_container_name, blob=destination)
     blob_client.upload_blob(data, overwrite=True)
 
-def reset_context(relevance_score):
+def reset_context(relevance_score=0.8):
     global context
     global chat_func
     global kernel
