@@ -136,6 +136,9 @@ def delete_user(current_user):
 def add_api_key(current_user):
     db = get_client()
     api_keys = db["api_keys"]
+    res = list(api_keys.find({"user_id": current_user['id']}))
+    if len(res) > 3:
+        return make_response(jsonify({"error": "One user can at most own 3 api keys"}), 400)
     api_keys.insert_one({"key": secrets.token_urlsafe(32), "user_id": current_user['id']})
     return make_response(jsonify({"data": "New API Key Added!"}), 201)
 
@@ -154,7 +157,7 @@ def get_api_keys(current_user):
 @user_token_required
 def delete_api_key(current_user):
     payload = request.json
-    if not payload or payload['key']:
+    if 'key' not in payload or not payload['key']:
         return make_response(jsonify({"error": "Must provide api key"}), 400)
     db = get_client()
     api_keys = db["api_keys"]
