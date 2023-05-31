@@ -3,13 +3,19 @@ from transformers import *
 from tokenizers import *
 from azure.storage.blob import BlobServiceClient
 from src.main.utils import connection_string, azure_container_name
-import os
+import os, zipfile
+import shutil
 import json
 
 def train_mode(path, current_user, collection_name):
     # download and prepare cc_news dataset
     #dataset = load_dataset("cc_news", split="train")
+    model_path = os.path.join(os.getcwd(), 'src/main/utils/models')
+    new_model_path = model_path + '/' + current_user['id'] + '_' + collection_name
+    archive_path = os.path.join(os.getcwd(), 'src/main/utils/models/' + current_user['id'] + '_archive_' + collection_name)
     try:
+        os.remove(archive_path + '.zip')
+        shutil.rmtree(new_model_path)
         os.remove('test.txt')
         os.remove('train.txt')
     except OSError:
@@ -72,7 +78,6 @@ def train_mode(path, current_user, collection_name):
     # enable truncation up to the maximum 512 tokens
     tokenizer.enable_truncation(max_length=max_length)
 
-    model_path = "pretrained-bert"
     # make the directory if not already there
     if not os.path.isdir(model_path):
         os.mkdir(model_path)
@@ -93,7 +98,7 @@ def train_mode(path, current_user, collection_name):
             "model_max_length": max_length,
             "max_len": max_length,
         }
-    json.dump(tokenizer_cfg, f)
+        json.dump(tokenizer_cfg, f)
 
     # when the tokenizer is trained and configured, load it as BertTokenizerFast
     tokenizer = BertTokenizerFast.from_pretrained(model_path)
@@ -192,25 +197,27 @@ def train_mode(path, current_user, collection_name):
         train_dataset=train_dataset,
         eval_dataset=test_dataset,
     )
-
     # train the model
     trainer.train()
-    model_path = os.path.join(os.getcwd(), 'models/' + current_user['id'] + '_' + collection_name)
-    archive_path = os.path.join(os.getcwd(), 'models/' + current_user['id'] + '_archive_' + collection_name)
-    trainer.save_model(model_path)
-    import shutil
-    shutil.make_archive(archive_path, 'zip', model_path)
+    trainer.save_model(new_model_path)
+    shutil.make_archive(archive_path, 'zip', new_model_path)
     azure_file_path = "Documents/" + current_user["id"] + '/models'
     azure_file_name = collection_name
     destination = azure_file_path + '/' + azure_file_name
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
     blob_client = blob_service_client.get_blob_client(container=azure_container_name, blob=destination)
-    with open(archive_path, 'rb') as data:
+    with open(archive_path + '.zip', 'rb') as data:
         blob_client.upload_blob(data, overwrite=True)
         print('Uploaded model: ' + collection_name)
-    os.remove(archive_path)
-    os.remove(path)
-    shutil.rmtree(model_path)
+    try:
+        os.remove(path)
+        os.remove(archive_path + '.zip')
+        shutil.rmtree(new_model_path)
+        os.remove('test.txt')
+        os.remove('train.txt')
+    except OSError:
+        pass
+    return destination
 
 
 '''

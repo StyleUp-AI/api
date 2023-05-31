@@ -97,10 +97,6 @@ def update_collection_from_file(file, file_name, file_extension, old_collection,
     except Exception as e:
         print(e)
         raise
-
-    users.update_one(
-        {"id": current_user["id"]}, {"$set": {"my_files": current_user["my_files"]}}
-    )
     os.remove(file_path)
 
 
@@ -135,9 +131,11 @@ def add_collection_from_file(file, file_name, file_extension, current_user):
         print(e)
         raise
     if "my_files" in current_user:
-        current_user["my_files"].append(json_file_name)
+        current_user["my_files"].append({'name': json_file_name, 'model': ''})
     else:
-        current_user["my_files"] = [json_file_name]
+        current_user["my_files"] = [{'name': json_file_name, 'model': ''}]
+    db = get_client()
+    users = db["users"]
     users.update_one(
         {"id": current_user["id"]}, {"$set": {"my_files": current_user["my_files"]}}
     )
@@ -223,8 +221,12 @@ def get_collection(current_user):
     args = request.args
     if args["collection_name"] is None:
         return make_response(jsonify({"error": "Must provide collection name"}), 400)
-    if 'my_files' not in current_user or args["collection_name"] + '.json' not in current_user['my_files']:
+    if 'my_files' not in current_user:
         return make_response(jsonify({"error": "User doens't own this collection"}), 400)
+    find_collection = next((item for item in current_user['my_files'] if item["name"] == args["collection_name"] + '.json'), None)
+    if find_collection is None:
+        return make_response(jsonify({"error": "User doens't own this collection"}), 400)
+    
     file_path = "Documents/" + current_user["id"]
     file_name = args["collection_name"] + ".json"
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
@@ -244,10 +246,11 @@ def delete_collection(current_user):
         return make_response(jsonify({"error": "Must provide collection name"}), 400)
     file_path = "Documents/" + current_user["id"]
     file_name = args["collection_name"] + ".json"
-    if 'my_files' not in current_user or file_name not in current_user["my_files"]:
-        return make_response(
-            jsonify({"error": "User does not own this collection"}), 400
-        )
+    if 'my_files' not in current_user:
+        return make_response(jsonify({"error": "User doens't own this collection"}), 400)
+    find_collection = next((item for item in current_user['my_files'] if item["name"] == file_name), None)
+    if find_collection is None:
+        return make_response(jsonify({"error": "User doens't own this collection"}), 400)
 
     try:
         blob_service_client = BlobServiceClient.from_connection_string(connection_string)
@@ -260,7 +263,8 @@ def delete_collection(current_user):
 
     db = get_client()
     users = db["users"]
-    current_user["my_files"].remove(file_name)
+    
+    current_user["my_files"] = [x for x in current_user["my_files"] if not (file_name == x['name'])]
     users.update_one({'id': current_user['id']}, {'$set': {'my_files': current_user['my_files']}})
     return make_response(jsonify({"data": "File removed successfully"}), 200)
 
@@ -273,7 +277,11 @@ def train_collection(current_user):
         return make_response(
             jsonify({"error": "Collection name must not be none"}), 400
         )
-    if 'my_files' not in current_user or payload["collection_name"] + '.json' not in current_user['my_files']:
+    
+    if 'my_files' not in current_user:
+        return make_response(jsonify({"error": "User doens't own this collection"}), 400)
+    find_collection = next((item for item in current_user['my_files'] if item["name"] == payload['collection_name'] + '.json'), None)
+    if find_collection is None:
         return make_response(jsonify({"error": "User doens't own this collection"}), 400)
     file_path = "Documents/" + current_user["id"]
     file_name = payload["collection_name"] + ".json"
@@ -286,9 +294,19 @@ def train_collection(current_user):
     for item in node['texts']:
         new_node.append({ "text": item})
     tmp_path = os.path.join(Path(__file__).parent.parent, 'utils/tmp/' + current_user["id"] + '_' + file_name)
+    try:
+        os.remove(tmp_path)
+    except OSError:
+        pass
     with open(tmp_path, 'a+') as output:
         output.write(json.dumps(new_node, indent=2, default=str))
-    train_mode(tmp_path, current_user, payload["collection_name"])
+    model_location = train_mode(tmp_path, current_user, payload["collection_name"])
+    db = get_client()
+    users = db["users"]
+    for item in current_user["my_files"]:
+        if item["name"] == payload["collection_name"]:
+            item['model'] = model_location
+    users.update_one({'id': current_user['id']}, {'$set': {'my_files': current_user['my_files']}})
     return make_response(jsonify({"data": "Model training request submitted"}), 200)
     
 
@@ -309,7 +327,8 @@ def add_collection(current_user):
     res["texts"] = payload["collection_list"]
     json_file_name = payload["collection_name"] + ".json"
     json_file_path = "Documents/" + current_user["id"]
-    if 'my_file' in current_user and json_file_name in current_user['my_files']:
+    find_collection = next((item for item in current_user['my_files'] if item["name"] == json_file_name), None)
+    if find_collection is not None:
         return make_response(
             jsonify({"error": "Collection name must be unique"}), 400
         )
@@ -322,9 +341,9 @@ def add_collection(current_user):
     db = get_client()
     users = db["users"]
     if "my_files" in current_user:
-        current_user["my_files"].append(json_file_name)
+        current_user["my_files"].append({'name': json_file_name, 'model': ''})
     else:
-        current_user["my_files"] = [json_file_name]
+        current_user["my_files"] = [{'name': json_file_name, 'model': ''}]
     users.update_one(
         {"id": current_user["id"]}, {"$set": {"my_files": current_user["my_files"]}}
     )
@@ -391,7 +410,8 @@ def chat(current_user):
     if payload is None or payload["input"] is None:
         return make_response(jsonify({"error": "Must provide input key"}), 400)
     file_name = payload["collection_name"] + ".json"
-    if 'my_files' not in current_user or file_name not in current_user["my_files"]:
+    find_collection = next((item for item in current_user['my_files'] if item["name"] == file_name), None)
+    if find_collection is None:
         return make_response(jsonify({"error": "User does't have this file"}), 400)
     file_name = "Documents/" + current_user["id"] + '/' + file_name
     result = pool.submit(
