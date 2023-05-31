@@ -14,3 +14,4 @@ tensorflow==2.13.0rc0
 datasets
 transformers
 sentencepiece
+accelerate

@@ -18,5 +18,6 @@ dependencies = [
     "tensorflow==2.13.0rc0",
     "transformers",
     "sentencepiece",
-    "datasets"
+    "datasets",
+    "accelerate"
 ]
