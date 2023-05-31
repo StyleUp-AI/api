@@ -10,13 +10,14 @@ from semantic_kernel.connectors.ai.open_ai import (
     OpenAITextCompletion,
     OpenAITextEmbedding,
 )
+from pathlib import Path
 from azure.storage.blob import BlobServiceClient
 from flask import Blueprint, request, jsonify, make_response
 from flask_cors import cross_origin
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_container_name, user_sessions
-from src.main.utils import train_ml_model
+from src.main.utils.model_actions import train_mode
 
 bots_routes = Blueprint("bots_routes", __name__)
 @bots_routes.after_request
@@ -280,21 +281,14 @@ def train_collection(current_user):
     container_client = blob_service_client.get_container_client(azure_container_name)
     blob_client = container_client.get_blob_client(file_path + '/' + file_name)
     res = blob_client.download_blob().readall()
-    data = json.loads(res)
-    async def training_process(current_user, data):
-        _res = await asyncio.ensure_future(train_ml_model(data['texts']))
-        print(_res)
-        print('Model Training finished')
-        embedding_vectors = np.array(_res)
-        embedding_vectors = json.dumps(list(list(str(r)) for r in embedding_vectors))
-        model_file_path = "Models/" + current_user["id"]
-        model_file_name = payload["collection_name"] + ".tsv"
-        try:
-            upload_to_blob_storage(model_file_path, model_file_name, embedding_vectors)
-        except Exception:
-            raise
-        # send email
-    asyncio.run(training_process(current_user, data))
+    node = json.loads(res)
+    new_node = []
+    for item in node['texts']:
+        new_node.append({ "text": item})
+    tmp_path = os.path.join(Path(__file__).parent.parent, 'utils/tmp/' + current_user["id"] + '_' + file_name)
+    with open(tmp_path, 'a+') as output:
+        output.write(json.dumps(new_node, indent=2, default=str))
+    train_mode(tmp_path, current_user, payload["collection_name"])
     return make_response(jsonify({"data": "Model training request submitted"}), 200)
     
 

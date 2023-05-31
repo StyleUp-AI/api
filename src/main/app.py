@@ -1,5 +1,4 @@
 from src.main.config import app_instance
-
 app = app_instance
 
 @app.route("/")
