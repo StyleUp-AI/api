@@ -294,6 +294,8 @@ def train_collection(current_user):
     for item in node['texts']:
         new_node.append({ "text": item})
     tmp_path = os.path.join(Path(__file__).parent.parent, 'utils/tmp/' + current_user["id"] + '_' + file_name)
+    if not os.path.isdir(os.path.join(Path(__file__).parent.parent, 'utils/tmp')):
+        os.mkdir(os.path.join(Path(__file__).parent.parent, 'utils/tmp'))
     try:
         os.remove(tmp_path)
     except OSError:
