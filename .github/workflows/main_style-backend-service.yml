@@ -48,6 +48,12 @@ jobs:
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
 
     steps:
+      - script: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          export PATH="$HOME/.cargo/bin:$PATH"
+          rustc --version
+        displayName: Install Rust
+        
       - name: Download artifact from build job
         uses: actions/download-artifact@v2
         with:
