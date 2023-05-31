@@ -18,6 +18,5 @@ dependencies = [
     "tensorflow>=2.13",
     "datasets",
     "transformers==4.18.0",
-    "sentencepiece",
-    "RUST"
+    "sentencepiece"
 ]
