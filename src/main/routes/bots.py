@@ -327,11 +327,12 @@ def add_collection(current_user):
     res["texts"] = payload["collection_list"]
     json_file_name = payload["collection_name"] + ".json"
     json_file_path = "Documents/" + current_user["id"]
-    find_collection = next((item for item in current_user['my_files'] if item["name"] == json_file_name), None)
-    if find_collection is not None:
-        return make_response(
-            jsonify({"error": "Collection name must be unique"}), 400
-        )
+    if 'my_files' in current_user:
+        find_collection = next((item for item in current_user['my_files'] if item["name"] == json_file_name), None)
+        if find_collection is not None:
+            return make_response(
+                jsonify({"error": "Collection name must be unique"}), 400
+            )
 
     try:
         upload_to_blob_storage(json_file_path, json_file_name, json.dumps(res, indent=2, default=str))

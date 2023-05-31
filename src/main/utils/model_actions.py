@@ -1,6 +1,6 @@
-from datasets import *
-from transformers import *
-from tokenizers import *
+from datasets import load_dataset
+from transformers import BertTokenizerFast, BertConfig, BertForMaskedLM, DataCollatorForLanguageModeling, TrainingArguments, Trainer
+from tokenizers import BertWordPieceTokenizer
 from azure.storage.blob import BlobServiceClient
 from src.main.utils import connection_string, azure_container_name
 import os, zipfile
