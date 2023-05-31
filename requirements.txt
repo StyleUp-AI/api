@@ -14,3 +14,4 @@ tensorflow==2.13.0rc0
 datasets
 transformers==4.18.0
 sentencepiece
+RUST
