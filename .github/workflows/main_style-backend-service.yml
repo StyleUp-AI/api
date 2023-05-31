@@ -3,7 +3,8 @@
 # More info on Python, GitHub Actions, and Azure App Service: https://aka.ms/python-webapps-actions
 
 name: Build and deploy Python app to Azure Web App - style-backend-service
-
+variables:
+  system.debug: true
 on:
   push:
     branches:
@@ -53,7 +54,7 @@ jobs:
           export PATH="$HOME/.cargo/bin:$PATH"
           rustc --version
         displayName: Install Rust
-        
+
       - name: Download artifact from build job
         uses: actions/download-artifact@v2
         with:
