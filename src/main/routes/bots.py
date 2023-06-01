@@ -176,6 +176,7 @@ async def talk_bot(user_input, file_name, relevance_score, current_user):
             return data["texts"][max_index]
 
     default_answer = await kernel.run_async(chat_func, input_context=context)
+    print(default_answer)
     context["chat_history"] += f"\nUser:> {user_input}\nChatBot:> {default_answer}\n"
     user_sessions[current_user['id']]['context'] = context
     return default_answer.result
