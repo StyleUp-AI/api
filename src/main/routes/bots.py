@@ -93,7 +93,7 @@ def update_collection_from_file(file, file_name, file_extension, old_collection,
     json_file_path = "Documents/" + current_user["id"]
     json_file_name = old_collection + ".json"
     try:
-        upload_to_blob_storage(json_file_path, json_file_name, json.dumps(res, indent=2, default=str))
+        upload_to_blob_storage(json_file_path, json_file_name, json.dumps(res, indent=2, default=str, ensure_ascii=False))
     except Exception as e:
         print(e)
         raise
@@ -126,7 +126,7 @@ def add_collection_from_file(file, file_name, file_extension, current_user):
     json_file_path = "Documents/" + current_user["id"]
     json_file_name = file_name + ".json"
     try:
-        upload_to_blob_storage(json_file_path, json_file_name, json.dumps(res, indent=2, default=str))
+        upload_to_blob_storage(json_file_path, json_file_name, json.dumps(res, indent=2, default=str, ensure_ascii=False))
     except Exception as e:
         print(e)
         raise
@@ -198,7 +198,7 @@ def update_collection(current_user):
     file_path = "Documents/" + current_user["id"]
     file_name = payload["collection_name"] + ".json"
     try:
-        upload_to_blob_storage(file_path, file_name, json.dumps(res, indent=2, default=str))
+        upload_to_blob_storage(file_path, file_name, json.dumps(res, indent=2, default=str, ensure_ascii=False))
     except Exception as e:
         print(e)
         return make_response(jsonify({"error": "Cannot update the collection"}), 400)
@@ -302,7 +302,7 @@ def train_collection(current_user):
     except OSError:
         pass
     with open(tmp_path, 'a+') as output:
-        output.write(json.dumps(new_node, indent=2, default=str))
+        output.write(json.dumps(new_node, indent=2, default=str, ensure_ascii=False))
     model_location = train_mode(tmp_path, current_user, payload["collection_name"])
     db = get_client()
     users = db["users"]
@@ -338,7 +338,7 @@ def add_collection(current_user):
             )
 
     try:
-        upload_to_blob_storage(json_file_path, json_file_name, json.dumps(res, indent=2, default=str))
+        upload_to_blob_storage(json_file_path, json_file_name, json.dumps(res, indent=2, default=str, ensure_ascii=False))
     except Exception as e:
         print(e)
         return make_response(jsonify({"error": "Cannot save the collection"}), 400)
