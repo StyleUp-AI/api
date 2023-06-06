@@ -1,6 +1,7 @@
 import asyncio
 import os
 import json
+import urllib
 import asyncio, concurrent.futures
 from langchain.document_loaders import AzureBlobStorageFileLoader
 from langchain.indexes import VectorstoreIndexCreator
@@ -64,12 +65,12 @@ async def talk_bot(user_input, file_name, current_user):
 @user_token_required
 def update_collection(current_user):
     payload = request.json
-    if payload["collection_list"] is None or payload["collection_name"] is None:
+    if payload["collection_content"] is None or payload["collection_name"] is None:
         return make_response(
             jsonify({"error": "Collection items must not be none"}), 400
         )
     file_path = "Documents/" + current_user["id"]
-    file_name = payload["collection_name"] + ".json"
+    file_name = payload["collection_name"] + ".txt"
     try:
         upload_to_blob_storage(file_path, file_name, payload["collection_name"] )
     except Exception as e:
@@ -119,7 +120,7 @@ def delete_collection(current_user):
     if args["collection_name"] is None:
         return make_response(jsonify({"error": "Must provide collection name"}), 400)
     file_path = "Documents/" + current_user["id"]
-    file_name = args["collection_name"] + ".json"
+    file_name = args["collection_name"] + ".txt"
     if 'my_files' not in current_user:
         return make_response(jsonify({"error": "User doens't own this collection"}), 400)
     find_collection = next((item for item in current_user['my_files'] if item["name"] == file_name), None)
@@ -154,11 +155,11 @@ def train_collection(current_user):
     
     if 'my_files' not in current_user:
         return make_response(jsonify({"error": "User doens't own this collection"}), 400)
-    find_collection = next((item for item in current_user['my_files'] if item["name"] == payload['collection_name'] + '.json'), None)
+    find_collection = next((item for item in current_user['my_files'] if item["name"] == payload['collection_name'] + '.txt'), None)
     if find_collection is None:
         return make_response(jsonify({"error": "User doens't own this collection"}), 400)
     file_path = "Documents/" + current_user["id"]
-    file_name = payload["collection_name"] + ".json"
+    file_name = payload["collection_name"] + ".txt"
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
     container_client = blob_service_client.get_container_client(azure_container_name)
     blob_client = container_client.get_blob_client(file_path + '/' + file_name)
@@ -190,8 +191,15 @@ def train_collection(current_user):
 @cross_origin(origin='*')
 @user_token_required
 def add_collection(current_user):
-    payload = request.json
-    if payload["collection_list"] is None:
+    print(request.headers['Content-Type'])
+    payload = {}
+    if "multipart/form-data" in request.headers['Content-Type']:
+        payload["collection_content"] = "file"
+        payload["collection_name"] = request.form.get("collection_name")
+        payload["collection_type"] = request.form.get("collection_type")
+    else:
+        payload = request.json
+    if payload["collection_content"] is None:
         return make_response(
             jsonify({"error": "Collection items must not be none"}), 400
         )
@@ -205,7 +213,14 @@ def add_collection(current_user):
             )
 
     try:
-        upload_to_blob_storage(json_file_path, json_file_name, payload["collection_list"])
+        if payload['collection_type'] == 'link':
+            with urllib.request.urlopen(payload["collection_content"]) as f:
+                upload_to_blob_storage(json_file_path, json_file_name, f.read())
+        elif payload['collection_type'] == 'file':
+            file = request.files["collection_content"]
+            upload_to_blob_storage(json_file_path, json_file_name, file.read())
+        else:
+            upload_to_blob_storage(json_file_path, json_file_name, payload["collection_content"])
     except Exception as e:
         print(e)
         return make_response(jsonify({"error": "Cannot save the collection"}), 400)
