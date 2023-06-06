@@ -1,15 +1,12 @@
 import asyncio
 import os
 import json
-import csv
-import pandas as pd
-import numpy as np
 import asyncio, concurrent.futures
-import semantic_kernel as sk
-from semantic_kernel.connectors.ai.open_ai import (
-    OpenAITextCompletion,
-    OpenAITextEmbedding,
-)
+from langchain.document_loaders import AzureBlobStorageFileLoader
+from langchain.indexes import VectorstoreIndexCreator
+from langchain.memory import ConversationBufferMemory
+from langchain.llms import OpenAI
+from langchain.prompts import PromptTemplate
 from pathlib import Path
 from azure.storage.blob import BlobServiceClient
 from flask import Blueprint, request, jsonify, make_response
@@ -31,19 +28,9 @@ def after_request(response):
 model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 pool = concurrent.futures.ThreadPoolExecutor()
 
-kernel = sk.Kernel()
-
 # Prepare OpenAI service using credentials stored in the `.env` file
 api_key = os.environ.get("OPENAI_API_KEY")
 org_id = os.environ.get("OPENAI_ORG_ID")
-kernel.add_text_completion_service(
-    "dv", OpenAITextCompletion("text-davinci-003", api_key, org_id)
-)
-kernel.add_text_embedding_generation_service(
-    "ada", OpenAITextEmbedding("text-embedding-ada-002", api_key, org_id)
-)
-kernel.register_memory_store(memory_store=sk.memory.VolatileMemoryStore())
-kernel.import_skill(sk.core_skills.TextMemorySkill())
 
 def upload_to_blob_storage(file_path, file_name, data):
     destination = file_path + '/' + file_name
@@ -51,135 +38,26 @@ def upload_to_blob_storage(file_path, file_name, data):
     blob_client = blob_service_client.get_blob_client(container=azure_container_name, blob=destination)
     blob_client.upload_blob(data, overwrite=True)
 
-def reset_context_helper(current_user, relevance_score=0.8):
-    global kernel
+def reset_context_helper(current_user):
     global user_sessions
-
-    context = kernel.create_new_context()
-    context["chat_history"] = ""
-
-    chat_func = kernel.create_semantic_function(
-        sk_prompt, max_tokens=200, temperature=relevance_score
-    )
-
     user_sessions[current_user['id']] = {
-        'context': context,
-        'chat_func': chat_func
+        'context': ConversationBufferMemory()
     }
 
-def update_collection_from_file(file, file_name, file_extension, old_collection, current_user):
-    file_path = "Tmp/" + current_user["id"] + "/" + file.filename
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-    file.save(file_path)
-    data = []
-    if file_extension == "csv":
-        with open(file_path) as f:
-            csv_file = csv.reader(f)
-            for row in csv_file:
-                data.append(row.split(","))
-    else:
-        with open(file_path) as f:
-            excel_file = pd.read_excel(f, header=None)
-            for column in excel_file.columns:
-                column_values = excel_file[column].tolist()
-                data.append(column_values)
-
-    res = {}
-    vectors = model.encode(data)
-    arr = np.array(vectors)
-    arr_as_list = arr.tolist()
-    res["vectors"] = arr_as_list
-    res["texts"] = data
-    json_file_path = "Documents/" + current_user["id"]
-    json_file_name = old_collection + ".json"
-    try:
-        upload_to_blob_storage(json_file_path, json_file_name, json.dumps(res, indent=2, default=str, ensure_ascii=False))
-    except Exception as e:
-        print(e)
-        raise
-    os.remove(file_path)
-
-
-def add_collection_from_file(file, file_name, file_extension, current_user):
-    file_path = "Tmp/" + current_user["id"] + "/" + file.filename
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-    file.save(file_path)
-    data = []
-    if file_extension == "csv":
-        with open(file_path) as f:
-            csv_file = csv.reader(f)
-            for row in csv_file:
-                data.append(row.split(","))
-    else:
-        with open(file_path) as f:
-            excel_file = pd.read_excel(f, header=None)
-            for column in excel_file.columns:
-                column_values = excel_file[column].tolist()
-                data.append(column_values)
-
-    res = {}
-    vectors = model.encode(data)
-    arr = np.array(vectors)
-    arr_as_list = arr.tolist()
-    res["vectors"] = arr_as_list
-    res["texts"] = data
-    json_file_path = "Documents/" + current_user["id"]
-    json_file_name = file_name + ".json"
-    try:
-        upload_to_blob_storage(json_file_path, json_file_name, json.dumps(res, indent=2, default=str, ensure_ascii=False))
-    except Exception as e:
-        print(e)
-        raise
-    if "my_files" in current_user:
-        current_user["my_files"].append({'name': json_file_name, 'model': ''})
-    else:
-        current_user["my_files"] = [{'name': json_file_name, 'model': ''}]
-    db = get_client()
-    users = db["users"]
-    users.update_one(
-        {"id": current_user["id"]}, {"$set": {"my_files": current_user["my_files"]}}
-    )
-    os.remove(file_path)
-
-
-async def talk_bot(user_input, file_name, relevance_score, current_user):
+async def talk_bot(user_input, file_name, current_user):
     global user_sessions
-    global kernel
+    global llm
 
     if current_user['id'] not in user_sessions:
         reset_context_helper(current_user)
-    context = user_sessions[current_user['id']]['context']
-    chat_func = user_sessions[current_user['id']]['chat_func']
-    try:
-        context["user_input"] = user_input
-    except KeyboardInterrupt:
-        print("\n\nExiting chat...")
-        return ""
-    except EOFError:
-        print("\n\nExiting chat...")
-        return ""
-
-    blob_service_client = BlobServiceClient.from_connection_string(connection_string)
-    container_client = blob_service_client.get_container_client(azure_container_name)
-    blob_client = container_client.get_blob_client(file_name)
-    res = blob_client.download_blob().readall()
-    data = json.loads(res)
-    vectors_input = model.encode(user_input)
-    if "vectors" in data and len(data["vectors"]) > 0:
-        output = cosine_similarity([vectors_input], data["vectors"])
-        max_index = np.argmax(output)
-        max_value = np.max(output)
-        if max_value >= relevance_score:
-            bot_answer = data["texts"][max_index]
-            context["chat_history"] += f"\nUser:> {user_input}\nChatBot:> {bot_answer}\n"
-            user_sessions[current_user['id']]['context'] = context
-            return data["texts"][max_index]
-
-    default_answer = await kernel.run_async(chat_func, input_context=context)
-    print(default_answer)
-    context["chat_history"] += f"\nUser:> {user_input}\nChatBot:> {default_answer}\n"
-    user_sessions[current_user['id']]['context'] = context
-    return default_answer.result
+    conversation = user_sessions[current_user['id']]['context']
+    az_loaders = AzureBlobStorageFileLoader(connection_string, azure_container_name, file_name)
+    loaders = az_loaders.load()
+    index = VectorstoreIndexCreator().from_documents(loaders)
+    answer = index.query(user_input)
+    conversation.chat_memory.add_user_message(user_input)
+    conversation.chat_memory.add_ai_message(answer)
+    return answer
 
 @bots_routes.route("/update_collection", methods=["PUT"])
 @cross_origin(origin='*')
@@ -190,16 +68,10 @@ def update_collection(current_user):
         return make_response(
             jsonify({"error": "Collection items must not be none"}), 400
         )
-    res = {}
-    vectors = model.encode(payload["collection_list"])
-    arr = np.array(vectors)
-    arr_as_list = arr.tolist()
-    res["vectors"] = arr_as_list
-    res["texts"] = payload["collection_list"]
     file_path = "Documents/" + current_user["id"]
     file_name = payload["collection_name"] + ".json"
     try:
-        upload_to_blob_storage(file_path, file_name, json.dumps(res, indent=2, default=str, ensure_ascii=False))
+        upload_to_blob_storage(file_path, file_name, payload["collection_name"] )
     except Exception as e:
         print(e)
         return make_response(jsonify({"error": "Cannot update the collection"}), 400)
@@ -323,13 +195,7 @@ def add_collection(current_user):
         return make_response(
             jsonify({"error": "Collection items must not be none"}), 400
         )
-    res = {}
-    vectors = model.encode(payload["collection_list"])
-    arr = np.array(vectors)
-    arr_as_list = arr.tolist()
-    res["vectors"] = arr_as_list
-    res["texts"] = payload["collection_list"]
-    json_file_name = payload["collection_name"] + ".json"
+    json_file_name = payload["collection_name"] + ".txt"
     json_file_path = "Documents/" + current_user["id"]
     if 'my_files' in current_user:
         find_collection = next((item for item in current_user['my_files'] if item["name"] == json_file_name), None)
@@ -339,7 +205,7 @@ def add_collection(current_user):
             )
 
     try:
-        upload_to_blob_storage(json_file_path, json_file_name, json.dumps(res, indent=2, default=str, ensure_ascii=False))
+        upload_to_blob_storage(json_file_path, json_file_name, payload["collection_list"])
     except Exception as e:
         print(e)
         return make_response(jsonify({"error": "Cannot save the collection"}), 400)
@@ -352,50 +218,6 @@ def add_collection(current_user):
     users.update_one(
         {"id": current_user["id"]}, {"$set": {"my_files": current_user["my_files"]}}
     )
-    return make_response(jsonify({"data": "New collection added"}), 201)
-
-@bots_routes.route("/update_collection_batch", methods=["PUT"])
-@cross_origin(origin='*')
-@user_token_required
-def update_collection_batch(current_user):
-    payload = request.json
-    if "files" not in request.files:
-        return make_response(jsonify({"error": "File must provide"}), 400)
-    files = request.files["files"]
-    old_collection = payload['collection_name']
-    for file in files:
-        (file_name, file_extension) = os.path.splitext(file.filename)
-        if file_extension != "csv" or file_extension != "xlsx":
-            return make_response(
-                jsonify(
-                    {"error: " "File: " + file_name + " is not valid csv or excel file"}
-                ),
-                400,
-            )
-        update_collection_from_file(file, file_name, file_extension, old_collection, current_user)
-    return make_response(jsonify({"data": "Update collection success!"}), 200)
-
-
-@bots_routes.route("/add_collection_batch", methods=["POST"])
-@cross_origin(origin='*')
-@user_token_required
-def add_collection_batch(current_user):
-    payload = request.json
-    if "files" not in request.files:
-        return make_response(jsonify({"error": "File must provide"}), 400)
-    files = request.files["files"]
-    db = get_client()
-    users = db["users"]
-    for i, file in enumerate(files):
-        (file_name, file_extension) = os.path.splitext(file.filename)
-        if file_extension != "csv" or file_extension != "xlsx":
-            return make_response(
-                jsonify(
-                    {"error: " "File: " + file_name + " is not valid csv or excel file"}
-                ),
-                400,
-            )
-        add_collection_from_file(file, file_name, file_extension, current_user)
     return make_response(jsonify({"data": "New collection added"}), 201)
 
 
@@ -414,13 +236,48 @@ def chat(current_user):
     payload = request.json
     if payload is None or payload["input"] is None:
         return make_response(jsonify({"error": "Must provide input key"}), 400)
-    file_name = payload["collection_name"] + ".json"
-    find_collection = next((item for item in current_user['my_files'] if item["name"] == file_name), None)
-    if find_collection is None:
-        return make_response(jsonify({"error": "User does't have this file"}), 400)
+    file_name = payload["collection_name"] + ".txt"
+    #find_collection = next((item for item in current_user['my_files'] if item["name"] == file_name), None)
+    #if find_collection is None:
+      #  return make_response(jsonify({"error": "User does't have this file"}), 400)
     file_name = "Documents/" + current_user["id"] + '/' + file_name
     result = pool.submit(
-        asyncio.run, talk_bot(payload["input"], file_name, payload["relevance_score"], current_user)
+        asyncio.run, talk_bot(payload["input"], file_name, current_user)
     ).result()
     #result = await talk_bot(payload["input"], file_name, payload["relevance_score"])
     return make_response(jsonify({"data": result}), 200)
+
+@bots_routes.route("/get_google_calendars", methods=["POST"])
+@cross_origin(origin='*')
+@bot_api_key_required
+def get_google_calendars(current_user):
+    payload = request.json
+    from src.main.routes.calendar_reader import GoogleCalendarReader
+    from datetime import date
+
+    loader = GoogleCalendarReader()
+    documents = loader.load_data(start_date=date.today(), number_of_results=50)
+    from typing import List
+    from langchain.docstore.document import Document as LCDocument
+
+    formatted_documents: List[LCDocument] = [doc.to_langchain_format() for doc in documents]
+    #from langchain import OpenAI
+    from langchain.chains import ConversationalRetrievalChain
+    from langchain.embeddings.openai import OpenAIEmbeddings
+    from langchain.vectorstores import Chroma
+    from langchain.text_splitter import CharacterTextSplitter
+    from langchain.memory import ConversationBufferMemory
+
+    '''
+    OpenAIEmbeddings uses text-embedding-ada-002
+    '''
+
+    text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
+    documents = text_splitter.split_documents(formatted_documents)
+    embeddings = OpenAIEmbeddings()
+    vector_store = Chroma.from_documents(documents, embeddings)
+    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+    from langchain.chat_models import ChatOpenAI
+    qa = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo"), vector_store.as_retriever(), memory=memory)
+    result = qa({"question": payload['input']})
+    return result["answer"]
