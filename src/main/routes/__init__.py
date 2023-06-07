@@ -3,6 +3,12 @@ import os
 import jwt
 from urllib.parse import quote_plus
 from functools import wraps
+from langchain.prompts import (
+    ChatPromptTemplate, 
+    MessagesPlaceholder, 
+    SystemMessagePromptTemplate, 
+    HumanMessagePromptTemplate
+)
 from flask import request, jsonify
 from pymongo.mongo_client import MongoClient
 
@@ -28,7 +34,11 @@ uri = (
 mongo_client = MongoClient(uri, tlsCAFile=certifi.where())
 #email_client = EmailClient.from_connection_string(azure_email_connection_string)
 user_sessions = {}
-
+sk_prompt = ChatPromptTemplate.from_messages([
+    SystemMessagePromptTemplate.from_template("The following is a friendly conversation between a human and an AI. The AI is talkative and provides lots of specific details from its context. If the AI does not know the answer to a question, it truthfully says it does not know."),
+    MessagesPlaceholder(variable_name="history"),
+    HumanMessagePromptTemplate.from_template("{input}")
+])
 html_template = """\
 <html>
   <body>

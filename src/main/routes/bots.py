@@ -8,18 +8,11 @@ from langchain.chains.question_answering import load_qa_chain
 from langchain.memory import ConversationBufferMemory
 from langchain.llms import OpenAI
 from langchain.chains import ConversationChain
-from langchain.prompts import (
-    ChatPromptTemplate, 
-    MessagesPlaceholder, 
-    SystemMessagePromptTemplate, 
-    HumanMessagePromptTemplate
-)
 from pathlib import Path
 from azure.storage.blob import BlobServiceClient
 from flask import Blueprint, request, jsonify, make_response
 from flask_cors import cross_origin
 from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
 from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_container_name, user_sessions
 from src.main.utils.model_actions import train_mode
 
@@ -47,11 +40,7 @@ def upload_to_blob_storage(file_path, file_name, data):
 
 def reset_context_helper(current_user):
     global user_sessions
-    prompt = ChatPromptTemplate.from_messages([
-        SystemMessagePromptTemplate.from_template("The following is a friendly conversation between a human and an AI. The AI is talkative and provides lots of specific details from its context. If the AI does not know the answer to a question, it truthfully says it does not know."),
-        MessagesPlaceholder(variable_name="history"),
-        HumanMessagePromptTemplate.from_template("{input}")
-    ])
+    global sk_prompt
     user_sessions[current_user['id']] = {
         'context': ConversationBufferMemory(return_messages=True),
         'prompt_template': prompt
