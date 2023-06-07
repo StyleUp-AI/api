@@ -61,8 +61,7 @@ class GoogleCalendarReader(BaseReader):
                 calendarId="primary",
                 timeMin=start_datetime_utc,
                 maxResults=number_of_results,
-                singleEvents=True,
-                orderBy="startTime",
+                singleEvents=False,
             )
             .execute()
         )

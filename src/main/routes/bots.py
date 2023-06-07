@@ -4,10 +4,16 @@ import json
 import urllib
 import asyncio, concurrent.futures
 from langchain.document_loaders import AzureBlobStorageFileLoader
-from langchain.indexes import VectorstoreIndexCreator
+from langchain.chains.question_answering import load_qa_chain
 from langchain.memory import ConversationBufferMemory
 from langchain.llms import OpenAI
-from langchain.prompts import PromptTemplate
+from langchain.chains import ConversationChain
+from langchain.prompts import (
+    ChatPromptTemplate, 
+    MessagesPlaceholder, 
+    SystemMessagePromptTemplate, 
+    HumanMessagePromptTemplate
+)
 from pathlib import Path
 from azure.storage.blob import BlobServiceClient
 from flask import Blueprint, request, jsonify, make_response
@@ -41,24 +47,38 @@ def upload_to_blob_storage(file_path, file_name, data):
 
 def reset_context_helper(current_user):
     global user_sessions
+    prompt = ChatPromptTemplate.from_messages([
+        SystemMessagePromptTemplate.from_template("The following is a friendly conversation between a human and an AI. The AI is talkative and provides lots of specific details from its context. If the AI does not know the answer to a question, it truthfully says it does not know."),
+        MessagesPlaceholder(variable_name="history"),
+        HumanMessagePromptTemplate.from_template("{input}")
+    ])
     user_sessions[current_user['id']] = {
-        'context': ConversationBufferMemory()
+        'context': ConversationBufferMemory(return_messages=True),
+        'prompt_template': prompt
     }
 
-async def talk_bot(user_input, file_name, current_user):
+async def talk_bot(user_input, file_name, current_user, relevance_score):
     global user_sessions
     global llm
 
     if current_user['id'] not in user_sessions:
         reset_context_helper(current_user)
-    conversation = user_sessions[current_user['id']]['context']
+    conversation_memory = user_sessions[current_user['id']]['context']
     az_loaders = AzureBlobStorageFileLoader(connection_string, azure_container_name, file_name)
     loaders = az_loaders.load()
-    index = VectorstoreIndexCreator().from_documents(loaders)
-    answer = index.query(user_input)
-    conversation.chat_memory.add_user_message(user_input)
-    conversation.chat_memory.add_ai_message(answer)
-    return answer
+    chain = load_qa_chain(OpenAI(temperature=0), chain_type="map_rerank", return_intermediate_steps=True)
+    results = chain({"input_documents": loaders, "question": user_input}, return_only_outputs=True)
+    results = results["intermediate_steps"]
+    max_score_item = max(results, key=lambda x:float(x['score']))
+    print(max_score_item)
+    if float(max_score_item['score']) >= relevance_score:
+        conversation_memory.chat_memory.add_user_message(user_input)
+        conversation_memory.chat_memory.add_ai_message(max_score_item['answer'])
+        return max_score_item['answer']
+    conversation = ConversationChain(memory=conversation_memory, prompt=user_sessions[current_user['id']]['prompt_template'], llm=OpenAI(temperature=0))
+    obj = conversation.predict(input=user_input).split("AI: ",1)[1]
+    print(obj)
+    return obj
 
 @bots_routes.route("/update_collection", methods=["PUT"])
 @cross_origin(origin='*')
@@ -255,9 +275,10 @@ def chat(current_user):
     #find_collection = next((item for item in current_user['my_files'] if item["name"] == file_name), None)
     #if find_collection is None:
       #  return make_response(jsonify({"error": "User does't have this file"}), 400)
+    relevance_score = payload['relevance_score'] or 0.8
     file_name = "Documents/" + current_user["id"] + '/' + file_name
     result = pool.submit(
-        asyncio.run, talk_bot(payload["input"], file_name, current_user)
+        asyncio.run, talk_bot(payload["input"], file_name, current_user, relevance_score * 100)
     ).result()
     #result = await talk_bot(payload["input"], file_name, payload["relevance_score"])
     return make_response(jsonify({"data": result}), 200)
