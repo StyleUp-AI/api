@@ -20,3 +20,4 @@ pdf2image
 tiktoken
 tabulate
 openai
+chromadb

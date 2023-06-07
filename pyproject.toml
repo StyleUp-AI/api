@@ -20,5 +20,6 @@ dependencies = [
     "datasets",
     "accelerate",
     "langchain",
-    "openai"
+    "openai",
+    "chromadb"
 ]
