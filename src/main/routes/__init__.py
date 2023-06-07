@@ -28,15 +28,6 @@ uri = (
 mongo_client = MongoClient(uri, tlsCAFile=certifi.where())
 #email_client = EmailClient.from_connection_string(azure_email_connection_string)
 user_sessions = {}
-sk_prompt = """
-ChatBot can have a conversation with you about any topic.
-It can give explicit instructions or say 'I don't know' if
-it does not have an answer.
-
-Chat:
-{{$chat_history}}
-User: {{$user_input}}
-ChatBot: """.strip()
 
 html_template = """\
 <html>
