@@ -43,7 +43,7 @@ def reset_context_helper(current_user):
     global sk_prompt
     user_sessions[current_user['id']] = {
         'context': ConversationBufferMemory(return_messages=True),
-        'prompt_template': prompt
+        'prompt_template': sk_prompt
     }
 
 async def talk_bot(user_input, file_name, current_user, relevance_score):
