@@ -4,7 +4,6 @@ python-dotenv==1.0.0
 pymongo==4.3.3
 bcrypt==4.0.1
 pyjwt==2.7.0
-semantic-kernel
 sentence-transformers==2.2.2
 pandas>= 2.0.1
 numpy==1.24.3
@@ -15,3 +14,7 @@ datasets
 transformers
 sentencepiece
 accelerate
+langchain
+unstructured==0.7.1
+pdf2image
+tiktoken
