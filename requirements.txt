@@ -18,3 +18,4 @@ langchain
 unstructured==0.7.1
 pdf2image
 tiktoken
+tabulate
