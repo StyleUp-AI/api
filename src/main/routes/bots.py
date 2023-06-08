@@ -107,18 +107,17 @@ def get_collection(current_user):
         return make_response(jsonify({"error": "Must provide collection name"}), 400)
     if 'my_files' not in current_user:
         return make_response(jsonify({"error": "User doens't own this collection"}), 400)
-    find_collection = next((item for item in current_user['my_files'] if item["name"] == args["collection_name"] + '.json'), None)
+    find_collection = next((item for item in current_user['my_files'] if item["name"] == args["collection_name"] + '.txt'), None)
     if find_collection is None:
         return make_response(jsonify({"error": "User doens't own this collection"}), 400)
     
     file_path = "Documents/" + current_user["id"]
-    file_name = args["collection_name"] + ".json"
+    file_name = args["collection_name"] + ".txt"
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
     container_client = blob_service_client.get_container_client(azure_container_name)
     blob_client = container_client.get_blob_client(file_path + '/' + file_name)
     res = blob_client.download_blob().readall()
-    data = json.loads(res)
-    return make_response(jsonify({"data": data['texts']}), 200)
+    return make_response(jsonify({"data": res}), 200)
 
 
 @bots_routes.route("/delete_collection", methods=["DELETE"])
