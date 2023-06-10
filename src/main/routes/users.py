@@ -6,7 +6,7 @@ import uuid
 import random
 import smtplib, ssl
 from azure.storage.blob import BlobServiceClient
-from azure.communication.email import EmailClient
+#from azure.communication.email import EmailClient
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from flask import Blueprint, request, jsonify, make_response
