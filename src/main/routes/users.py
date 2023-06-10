@@ -4,16 +4,15 @@ import jwt
 import os
 import uuid
 import random
-import smtplib, ssl
+from azure.communication.email import EmailClient
 from azure.storage.blob import BlobServiceClient
-#from azure.communication.email import EmailClient
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from flask import Blueprint, request, jsonify, make_response
 from flask_cors import cross_origin
 from datetime import datetime, timedelta
 from src.main.routes import get_client, user_token_required, html_template, connection_string, azure_container_name
 from werkzeug.security import check_password_hash, generate_password_hash
+from google.oauth2 import id_token
+from google.auth.transport import requests
 
 user_routes = Blueprint("user_routes", __name__)
 @user_routes.after_request
@@ -60,24 +59,32 @@ def get_otp():
     while otp.find_one({"code": num_with_zeros, "email": args["email"]}) is not None:
         num = random.randrange(1, 10**6)
         num_with_zeros = '{:06}'.format(num)
-    sender_email = os.environ.get("SENDER_EMAIL")
-    sender_password = os.environ.get("SENDER_PASSWORD")
-    message = MIMEMultipart("alternative")
-    message['Subject'] = 'Your one time code'
-    message['From'] = sender_email
-    message['To'] = args['email']
-    html_template.format(str(num_with_zeros))
-    part = MIMEText(html_template, "html")
-    message.attach(part)
-    context = ssl.create_default_context()
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
-        server.login(sender_email, sender_password)
-        server.sendmail(
-            sender_email, args["email"], message.as_string()
-        )
-    otp.ensure_index("date", expireAfterSeconds=5*60)
+    otp.create_index("date", expireAfterSeconds=5*60)
     otp.insert_one({"code": num_with_zeros, "email": args["email"], "verified": "No"})
+
+    azure_email_connection_string = os.environ.get("AZURE_EMAIL_CONNECTION_STRING")
+    client = EmailClient.from_connection_string(azure_email_connection_string)
+    message = {
+        'content': {
+            'subject': 'Your one time passcode',
+            'plainText': 'Hi, Please find your otp: ' + str(num_with_zeros),
+            'html': html_template.format(str(num_with_zeros))
+        },
+        'recipients': {
+            'to': [
+                {
+                    'address': args["email"],
+                    'displayName': 'Styleup AI'
+                }
+            ]
+        },
+        'senderAddress': 'noreply@styleup.fun'
+    }
+    poller = client.begin_send(message)
+    print(poller.result())
     return make_response(jsonify({"data": "Otp sent"}), 200)
+    
+    
 
 @user_routes.route("/verify_otp", methods=["POST"])
 @cross_origin(origin='*')
@@ -159,9 +166,55 @@ def delete_api_key(current_user):
         return make_response(jsonify({"error": "Must provide api key"}), 400)
     db = get_client()
     api_keys = db["api_keys"]
-    res = api_keys.delete_one({"key": payload['key'], 'user_id': current_user['id']})
+    api_keys.delete_one({"key": payload['key'], 'user_id': current_user['id']})
     return make_response(jsonify({"data": 'Api key deleted'}), 200)
 
+@user_routes.route("/google_sso", methods=["POST"])
+@cross_origin(origin='*')
+def google_sso():
+    payload = request.json
+    if 'token' not in payload or not payload['token']:
+        return make_response(jsonify({"error": "Must provide token"}), 400)
+    token = payload['token']
+    CLIENT_ID = os.environ.get('GOOGLE_SSO_CLIENT_ID')
+    idinfo = id_token.verify_oauth2_token(token, requests.Request(), CLIENT_ID)
+    user_id = idinfo['sub']
+    db = get_client()
+    users = db["users"]
+    api_key = db['api_keys']
+    find_user = users.find_one({"id": user_id})
+    if not find_user:
+        users.insert_one(
+            {"id": user_id, "email": payload["email"]}
+        )
+        api_key.insert_one({"key": secrets.token_urlsafe(32), "user_id": user_id})
+    
+    access_token = jwt.encode(
+        {"user_id": user_id, "exp": datetime.utcnow() + timedelta(days=7)},
+        os.environ.get("SECRET_KEY"),
+        algorithm="HS256",
+    )
+
+    refresh_token = jwt.encode(
+        {
+            "user_id": user_id,
+            "exp": datetime.utcnow() + timedelta(days=365),
+        },
+        os.environ.get("SECRET_KEY"),
+        algorithm="HS256",
+    )
+
+    return make_response(
+        jsonify(
+            {
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "user_id": user_id,
+            }
+        ),
+        200,
+    )
+    
 @user_routes.route("/signin", methods=["POST"])
 @cross_origin(origin='*')
 def signin():

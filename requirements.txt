@@ -21,3 +21,6 @@ tiktoken
 tabulate
 openai
 chromadb
+pymongo
+azure-communication-email
+evaluate
