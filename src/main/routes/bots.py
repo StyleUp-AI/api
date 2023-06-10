@@ -279,8 +279,9 @@ def get_google_calendars(current_user):
         reset_context_helper(current_user)
     loader = GoogleCalendarReader()
     documents = loader.load_data(start_date=date.today(), number_of_results=50)
+    print(documents)
     if documents == 'Need to login to google':
-        return make_response(jsonify({"error": "Need to login to google"}), 400)
+        return make_response(jsonify({"data": "Need to login to google"}), 200)
     from typing import List
     from langchain.docstore.document import Document as LCDocument
 

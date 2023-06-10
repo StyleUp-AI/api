@@ -197,7 +197,7 @@ def google_sso():
         "scopes": ["https://www.googleapis.com/auth/calendar.readonly"],
         "expiry": payload['expiry_date']
     }
-    token_path = os.path.join(os.getcwd(), "src/main/routes/credentials.json")
+    token_path = os.path.join(os.getcwd(), "src/main/routes/token.json")
     with open(token_path, 'a+') as output:
         output.write(json.dumps(obj, indent=2, default=str, ensure_ascii=False))
     
