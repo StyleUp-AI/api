@@ -178,7 +178,7 @@ def google_sso():
         return make_response(jsonify({"error": "Must provide token"}), 400)
     token = payload['token']
     CLIENT_ID = os.environ.get('GOOGLE_SSO_CLIENT_ID')
-    idinfo = id_token.verify_oauth2_token(token, requests.Request(), CLIENT_ID)
+    idinfo = id_token.verify_oauth2_token(token, requests.Request(), CLIENT_ID, clock_skew_in_seconds=60)
     user_id = idinfo['sub']
     db = get_client()
     users = db["users"]
