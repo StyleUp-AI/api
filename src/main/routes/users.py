@@ -1,6 +1,7 @@
 import re
 import secrets
 import jwt
+import json
 import os
 import uuid
 import random
@@ -188,6 +189,17 @@ def google_sso():
             {"id": user_id, "email": payload["email"]}
         )
         api_key.insert_one({"key": secrets.token_urlsafe(32), "user_id": user_id})
+    obj = {
+        "token": token,
+        "token_uri": "https://oauth2.googleapis.com/token", 
+        "client_id": "174069416578-fgb8ks6su101kh793nduk9uqn03u9jpd.apps.googleusercontent.com", 
+        "client_secret": "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", 
+        "scopes": ["https://www.googleapis.com/auth/calendar.readonly"],
+        "expiry": payload['expiry_date']
+    }
+    token_path = os.path.join(os.getcwd(), "src/main/routes/credentials.json")
+    with open(token_path, 'a+') as output:
+        output.write(json.dumps(obj, indent=2, default=str, ensure_ascii=False))
     
     access_token = jwt.encode(
         {"user_id": user_id, "exp": datetime.utcnow() + timedelta(days=7)},

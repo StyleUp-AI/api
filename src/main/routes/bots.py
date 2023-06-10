@@ -44,7 +44,9 @@ def reset_context_helper(current_user):
     global sk_prompt
     user_sessions[current_user['id']] = {
         'context': ConversationBufferMemory(return_messages=True),
-        'prompt_template': sk_prompt
+        'prompt_template': sk_prompt,
+        'calendar_context': ConversationBufferMemory(memory_key='chat_history', return_messages=True),
+        'tutor_context': ConversationBufferMemory(return_messages=True)
     }
 
 async def talk_bot(user_input, file_name, current_user, relevance_score):
@@ -273,8 +275,12 @@ def get_google_calendars(current_user):
     from src.main.routes.calendar_reader import GoogleCalendarReader
     from datetime import date
 
+    if current_user['id'] not in user_sessions or 'calendar_context' not in user_sessions[current_user['id']]:
+        reset_context_helper(current_user)
     loader = GoogleCalendarReader()
     documents = loader.load_data(start_date=date.today(), number_of_results=50)
+    if documents == 'Need to login to google':
+        return make_response(jsonify({"error": "Need to login to google"}), 400)
     from typing import List
     from langchain.docstore.document import Document as LCDocument
 
@@ -284,7 +290,6 @@ def get_google_calendars(current_user):
     from langchain.embeddings.openai import OpenAIEmbeddings
     from langchain.vectorstores import Chroma
     from langchain.text_splitter import CharacterTextSplitter
-    from langchain.memory import ConversationBufferMemory
 
     '''
     OpenAIEmbeddings uses text-embedding-ada-002
@@ -294,29 +299,30 @@ def get_google_calendars(current_user):
     documents = text_splitter.split_documents(formatted_documents)
     embeddings = OpenAIEmbeddings()
     vector_store = Chroma.from_documents(documents, embeddings)
-    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+    
     from langchain.chat_models import ChatOpenAI
-    qa = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo"), vector_store.as_retriever(), memory=memory)
+    qa = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo"), vector_store.as_retriever(), memory=user_sessions[current_user['id']]['calendar_context'])
     result = qa({"question": payload['input']})
     return make_response(jsonify({"data": result["answer"]}), 200)
 
-'''@bots_routes.route("/tutor_agent", methods=["POST"])
+@bots_routes.route("/tutor_agent", methods=["POST"])
 @cross_origin(origin='*')
 @bot_api_key_required
 def tutor_agent(current_user):
     payload = request.json
-    from langchain.prompts import load_prompt
     from langchain.chat_models import ChatOpenAI
     from langchain.chains import ConversationChain
+    prompt = json.load(open(os.path.join(os.getcwd(), 'src/main/routes/ranedeer.json')))
+    if current_user['id'] not in user_sessions or 'tutor_context' not in user_sessions[current_user['id']]:
+        reset_context_helper(current_user)
+        user_sessions[current_user['id']]['tutor_context'].chat_memory.add_ai_message(json.dumps(prompt, indent=2, default=str, ensure_ascii=False))
 
-    prompt = load_prompt(os.path.join(os.getcwd(), 'src/main/routes/ranedeer.json'))
     llm = ChatOpenAI(model_name='gpt-3.5-turbo-0301', openai_api_key=api_key, openai_organization=org_id)
     conversation = ConversationChain(
-            llm=llm, 
-            prompt=prompt,
+            llm=llm,
             verbose=True, 
-            memory=ConversationBufferMemory(memory_key="tutor_history", return_messages=True),
+            memory=user_sessions[current_user['id']]['tutor_context'],
         )
     response = conversation.predict(input=payload['input'])
 
-    return make_response(jsonify({"data": response}), 200)'''
+    return make_response(jsonify({"data": response}), 200)

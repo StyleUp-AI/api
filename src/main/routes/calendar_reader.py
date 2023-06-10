@@ -33,7 +33,7 @@ class GoogleCalendarReader(BaseReader):
         self,
         number_of_results: Optional[int] = 100,
         start_date: Optional[Union[str, datetime.date]] = None,
-    ) -> List[Document]:
+    ):
 
         """Load data from user's calendar.
 
@@ -45,6 +45,8 @@ class GoogleCalendarReader(BaseReader):
         from googleapiclient.discovery import build
 
         credentials = self._get_credentials()
+        if credentials == 'Need to login to google':
+            return credentials
         service = build("calendar", "v3", credentials=credentials)
 
         if start_date is None:
@@ -122,10 +124,11 @@ class GoogleCalendarReader(BaseReader):
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
             else:
-                flow = InstalledAppFlow.from_client_secrets_file(
+                '''flow = InstalledAppFlow.from_client_secrets_file(
                    os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES
                 )
-                creds = flow.run_local_server()
+                creds = flow.run_local_server()'''
+                return 'Need to login to google'
             # Save the credentials for the next run
             with open("token.json", "w") as token:
                 token.write(creds.to_json())
