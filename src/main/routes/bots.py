@@ -298,4 +298,25 @@ def get_google_calendars(current_user):
     from langchain.chat_models import ChatOpenAI
     qa = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo"), vector_store.as_retriever(), memory=memory)
     result = qa({"question": payload['input']})
-    return result["answer"]
+    return make_response(jsonify({"data": result["answer"]}), 200)
+
+'''@bots_routes.route("/tutor_agent", methods=["POST"])
+@cross_origin(origin='*')
+@bot_api_key_required
+def tutor_agent(current_user):
+    payload = request.json
+    from langchain.prompts import load_prompt
+    from langchain.chat_models import ChatOpenAI
+    from langchain.chains import ConversationChain
+
+    prompt = load_prompt(os.path.join(os.getcwd(), 'src/main/routes/ranedeer.json'))
+    llm = ChatOpenAI(model_name='gpt-3.5-turbo-0301', openai_api_key=api_key, openai_organization=org_id)
+    conversation = ConversationChain(
+            llm=llm, 
+            prompt=prompt,
+            verbose=True, 
+            memory=ConversationBufferMemory(memory_key="tutor_history", return_messages=True),
+        )
+    response = conversation.predict(input=payload['input'])
+
+    return make_response(jsonify({"data": response}), 200)'''
