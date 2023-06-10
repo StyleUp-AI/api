@@ -117,8 +117,8 @@ class GoogleCalendarReader(BaseReader):
         from google_auth_oauthlib.flow import InstalledAppFlow
 
         creds = None
-        if os.path.exists("token.json"):
-            creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+        if os.path.exists(os.path.join(os.getcwd(), "src/main/routes/token.json")):
+            creds = Credentials.from_authorized_user_file(os.path.join(os.getcwd(), "src/main/routes/token.json"), SCOPES)
         # If there are no (valid) credentials available, let the user log in.
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
@@ -130,7 +130,7 @@ class GoogleCalendarReader(BaseReader):
                 creds = flow.run_local_server()'''
                 return 'Need to login to google'
             # Save the credentials for the next run
-            with open("token.json", "w") as token:
+            with open(os.path.join(os.getcwd(), "src/main/routes/token.json"), "w") as token:
                 token.write(creds.to_json())
 
         return creds
