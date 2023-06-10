@@ -3,7 +3,11 @@ from transformers import BertTokenizerFast, BertConfig, BertForMaskedLM, DataCol
 from tokenizers import BertWordPieceTokenizer
 from azure.storage.blob import BlobServiceClient
 from src.main.utils import connection_string, azure_container_name
-import os, zipfile
+from src.main.routes import get_client
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import smtplib, ssl
+import os
 import shutil
 import json
 
@@ -217,9 +221,45 @@ def train_mode(path, current_user, collection_name):
         os.remove('train.txt')
     except OSError:
         pass
-    return destination
+    db = get_client()
+    users = db["users"]
+    for item in current_user["my_files"]:
+        if item["name"] == collection_name:
+            item['model'] = destination
+    users.update_one({'id': current_user['id']}, {'$set': {'my_files': current_user['my_files']}})
+   #send_email(current_user['email'], collection_name, blob_client.url)
+    print('Finished' + destination)
+    
 
+html_template = """\
+<html>
+  <body>
+    <p>Hi,<br>
+       Your model {0} has been generated successfully, here is the link: {1}
+    </p>
+  </body>
+</html>
+"""
 
+'''def send_email(email, model_name, url):
+    if email is None:
+        print("Must provide email")
+        return 
+    sender_email = os.environ.get("SENDER_EMAIL")
+    sender_password = os.environ.get("SENDER_PASSWORD")
+    message = MIMEMultipart("alternative")
+    message['Subject'] = 'Your model is ready'
+    message['From'] = sender_email
+    message['To'] = email
+    html_template.format(model_name, url)
+    part = MIMEText(html_template, "html")
+    message.attach(part)
+    context = ssl.create_default_context()
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
+        server.login(sender_email, sender_password)
+        server.sendmail(
+            sender_email, email, message.as_string()
+        )'''
 '''
 # when you load from pretrained
 model = BertForMaskedLM.from_pretrained(os.path.join(model_path, "checkpoint-10000"))

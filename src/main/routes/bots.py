@@ -3,6 +3,7 @@ import os
 import json
 import urllib
 import asyncio, concurrent.futures
+from multiprocessing import Process
 from langchain.document_loaders import AzureBlobStorageFileLoader
 from langchain.chains.question_answering import load_qa_chain
 from langchain.memory import ConversationBufferMemory
@@ -49,7 +50,6 @@ def reset_context_helper(current_user):
 async def talk_bot(user_input, file_name, current_user, relevance_score):
     global user_sessions
     global llm
-
     if current_user['id'] not in user_sessions:
         reset_context_helper(current_user)
     conversation_memory = user_sessions[current_user['id']]['context']
@@ -117,7 +117,7 @@ def get_collection(current_user):
     container_client = blob_service_client.get_container_client(azure_container_name)
     blob_client = container_client.get_blob_client(file_path + '/' + file_name)
     res = blob_client.download_blob().readall()
-    return make_response(jsonify({"data": res}), 200)
+    return make_response(jsonify({"data": str(res)}), 200)
 
 
 @bots_routes.route("/delete_collection", methods=["DELETE"])
@@ -172,9 +172,8 @@ def train_collection(current_user):
     container_client = blob_service_client.get_container_client(azure_container_name)
     blob_client = container_client.get_blob_client(file_path + '/' + file_name)
     res = blob_client.download_blob().readall()
-    node = json.loads(res)
     new_node = []
-    for item in node['texts']:
+    for item in res.splitlines():
         new_node.append({ "text": item})
     tmp_path = os.path.join(Path(__file__).parent.parent, 'utils/tmp/' + current_user["id"] + '_' + file_name)
     if not os.path.isdir(os.path.join(Path(__file__).parent.parent, 'utils/tmp')):
@@ -185,13 +184,8 @@ def train_collection(current_user):
         pass
     with open(tmp_path, 'a+') as output:
         output.write(json.dumps(new_node, indent=2, default=str, ensure_ascii=False))
-    model_location = train_mode(tmp_path, current_user, payload["collection_name"])
-    db = get_client()
-    users = db["users"]
-    for item in current_user["my_files"]:
-        if item["name"] == payload["collection_name"]:
-            item['model'] = model_location
-    users.update_one({'id': current_user['id']}, {'$set': {'my_files': current_user['my_files']}})
+    thread = Process(target=train_mode, args=(tmp_path, current_user, payload["collection_name"]))
+    thread.start()
     return make_response(jsonify({"data": "Model training request submitted"}), 200)
     
 
