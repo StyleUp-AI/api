@@ -294,9 +294,9 @@ def get_google_calendars(current_user):
     loader = GoogleCalendarReader()
     node = json.loads(payload['user_info'])
     documents = loader.load_data(start_date=date.today(), number_of_results=50, user_info=node)
-    print(documents)
     if documents == 'Need to login to google':
         return make_response(jsonify({"data": "Need to login to google"}), 200)
+    
     from typing import List
     from langchain.docstore.document import Document as LCDocument
 
@@ -314,10 +314,12 @@ def get_google_calendars(current_user):
     text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
     documents = text_splitter.split_documents(formatted_documents)
     embeddings = OpenAIEmbeddings()
+    if len(documents) == 0:
+        documents = []
     vector_store = Chroma.from_documents(documents, embeddings)
     
     from langchain.chat_models import ChatOpenAI
-    qa = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo"), vector_store.as_retriever(), memory=user_sessions[current_user['id']]['calendar_context'])
+    qa = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo"), retriever=vector_store.as_retriever(), memory=user_sessions[current_user['id']]['calendar_context'])
     result = qa({"question": payload['input']})
     return make_response(jsonify({"data": result["answer"]}), 200)
 
