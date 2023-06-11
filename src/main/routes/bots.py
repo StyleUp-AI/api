@@ -296,7 +296,9 @@ def get_google_calendars(current_user):
     documents = loader.load_data(start_date=date.today(), number_of_results=50, user_info=node)
     if documents == 'Need to login to google':
         return make_response(jsonify({"data": "Need to login to google"}), 200)
-    
+    if len(documents) == 0:
+        from llama_index.readers.schema.base import Document
+        documents.append(Document('No events'))
     from typing import List
     from langchain.docstore.document import Document as LCDocument
 
@@ -306,13 +308,13 @@ def get_google_calendars(current_user):
     from langchain.embeddings.openai import OpenAIEmbeddings
     from langchain.vectorstores import Chroma
     from langchain.text_splitter import CharacterTextSplitter
-
     '''
     OpenAIEmbeddings uses text-embedding-ada-002
     '''
 
     text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
     documents = text_splitter.split_documents(formatted_documents)
+    
     embeddings = OpenAIEmbeddings()
     if len(documents) == 0:
         documents = []

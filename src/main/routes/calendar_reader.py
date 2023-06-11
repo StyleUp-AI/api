@@ -95,8 +95,6 @@ class GoogleCalendarReader(BaseReader):
                 event_string += f"Organizer: {email}"
 
             results.append(Document(event_string))
-        if len(results) == 0:
-            results.append(Document(''))
         return results
 
     def _get_credentials(self, user_info) -> Any:
