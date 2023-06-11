@@ -19,6 +19,7 @@ from llama_index.readers.schema.base import Document
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
 class GoogleCalendarReader(BaseReader):
     """Google Calendar reader.
@@ -29,7 +30,6 @@ class GoogleCalendarReader(BaseReader):
 
     def load_data(
         self,
-        token,
         number_of_results: Optional[int] = 100,
         start_date: Optional[Union[str, datetime.date]] = None,
     ):
@@ -43,7 +43,7 @@ class GoogleCalendarReader(BaseReader):
 
         from googleapiclient.discovery import build
 
-        credentials = self._get_credentials(token)
+        credentials = self._get_credentials()
         if credentials == 'Need to login to google':
             return credentials
         service = build("calendar", "v3", credentials=credentials)
@@ -101,7 +101,7 @@ class GoogleCalendarReader(BaseReader):
 
         return results
 
-    def _get_credentials(self, token=None) -> Any:
+    def _get_credentials(self) -> Any:
         """Get valid user credentials from storage.
 
         The file token.json stores the user's access and refresh tokens, and is
@@ -111,20 +111,24 @@ class GoogleCalendarReader(BaseReader):
         Returns:
             Credentials, the obtained credential.
         """
-        if token is None:
-            return 'Need to login to google'
         from google.auth.transport.requests import Request
         from google.oauth2.credentials import Credentials
-        SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
-        creds = Credentials(token, 
-                            refresh_token=token, 
-                            token_uri="https://oauth2.googleapis.com/token", 
-                            client_id="174069416578-fgb8ks6su101kh793nduk9uqn03u9jpd.apps.googleusercontent.com", 
-                            client_secret="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", 
-                            scopes=SCOPES)
+        creds = None
+        if os.path.exists(os.path.join(os.getcwd(), "src/main/routes/token.json")):
+            creds = Credentials.from_authorized_user_file(os.path.join(os.getcwd(), "src/main/routes/token.json"), SCOPES)
         # If there are no (valid) credentials available, let the user log in.
         if not creds or not creds.valid:
-            return 'Need to login to google'
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                '''flow = InstalledAppFlow.from_client_secrets_file(
+                   os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES
+                )
+                creds = flow.run_local_server()'''
+                return 'Need to login to google'
+            # Save the credentials for the next run
+            with open(os.path.join(os.getcwd(), "src/main/routes/token.json"), "w") as token:
+                token.write(creds.to_json())
 
         return creds

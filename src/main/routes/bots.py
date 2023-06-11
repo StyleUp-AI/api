@@ -16,6 +16,7 @@ from flask_cors import cross_origin
 from sentence_transformers import SentenceTransformer
 from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_container_name, user_sessions
 from src.main.utils.model_actions import train_mode
+SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
 bots_routes = Blueprint("bots_routes", __name__)
 @bots_routes.after_request
@@ -267,6 +268,19 @@ def chat(current_user):
     #result = await talk_bot(payload["input"], file_name, payload["relevance_score"])
     return make_response(jsonify({"data": result}), 200)
 
+@bots_routes.route("/authenticate_google_calendar", methods=["POST"])
+@cross_origin(origins='*')
+def authenticate_google_calendar():
+    from google_auth_oauthlib.flow import InstalledAppFlow
+
+    flow = InstalledAppFlow.from_client_secrets_file(
+        os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES
+    )
+    creds = flow.run_local_server()
+    with open(os.path.join(os.getcwd(), "src/main/routes/token.json"), "w") as token:
+        token.write(creds.to_json())
+    return make_response(jsonify({"data": "Calendar authorized"}), 200)
+
 @bots_routes.route("/get_google_calendars", methods=["POST"])
 @cross_origin(origin='*')
 @bot_api_key_required
@@ -278,7 +292,7 @@ def get_google_calendars(current_user):
     if current_user['id'] not in user_sessions or 'calendar_context' not in user_sessions[current_user['id']]:
         reset_context_helper(current_user)
     loader = GoogleCalendarReader()
-    documents = loader.load_data(start_date=date.today(), number_of_results=50, token=payload['token'])
+    documents = loader.load_data(start_date=date.today(), number_of_results=50)
     print(documents)
     if documents == 'Need to login to google':
         return make_response(jsonify({"data": "Need to login to google"}), 200)
