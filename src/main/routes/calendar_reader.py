@@ -118,7 +118,7 @@ class GoogleCalendarReader(BaseReader):
         SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
         creds = Credentials(token, 
-                            efresh_token=token, 
+                            refresh_token=token, 
                             token_uri="https://oauth2.googleapis.com/token", 
                             client_id="174069416578-fgb8ks6su101kh793nduk9uqn03u9jpd.apps.googleusercontent.com", 
                             client_secret="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", 
