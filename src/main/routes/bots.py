@@ -332,7 +332,7 @@ def tutor_agent(current_user):
     payload = request.json
     from langchain.chat_models import ChatOpenAI
     from langchain.chains import ConversationChain
-    prompt = json.load(open(os.path.join(os.getcwd(), 'src/main/routes/ranedeer.json')))
+    prompt = json.load(open(os.path.join(os.getcwd(), 'src/main/routes/ranedeer.json'), 'rb'))
     if current_user['id'] not in user_sessions or 'tutor_context' not in user_sessions[current_user['id']]:
         reset_context_helper(current_user)
         user_sessions[current_user['id']]['tutor_context'].chat_memory.add_ai_message(json.dumps(prompt, indent=2, default=str, ensure_ascii=False))
