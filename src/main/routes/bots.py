@@ -277,9 +277,7 @@ def authenticate_google_calendar():
         os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES
     )
     creds = flow.run_local_server()
-    with open(os.path.join(os.getcwd(), "src/main/routes/token.json"), "w") as token:
-        token.write(creds.to_json())
-    return make_response(jsonify({"data": "Calendar authorized"}), 200)
+    return make_response(jsonify({"data": creds.to_json()}), 200)
 
 @bots_routes.route("/get_google_calendars", methods=["POST"])
 @cross_origin(origin='*')
@@ -288,11 +286,13 @@ def get_google_calendars(current_user):
     payload = request.json
     from src.main.routes.calendar_reader import GoogleCalendarReader
     from datetime import date
-
+    if 'user_info' not in payload or payload['user_info'] == '':
+        return make_response(jsonify({"data": "Need to login to google"}), 200)
+    
     if current_user['id'] not in user_sessions or 'calendar_context' not in user_sessions[current_user['id']]:
         reset_context_helper(current_user)
     loader = GoogleCalendarReader()
-    documents = loader.load_data(start_date=date.today(), number_of_results=50)
+    documents = loader.load_data(start_date=date.today(), number_of_results=50, user_info=payload['user_info'])
     print(documents)
     if documents == 'Need to login to google':
         return make_response(jsonify({"data": "Need to login to google"}), 200)
