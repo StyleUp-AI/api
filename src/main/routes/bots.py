@@ -292,7 +292,8 @@ def get_google_calendars(current_user):
     if current_user['id'] not in user_sessions or 'calendar_context' not in user_sessions[current_user['id']]:
         reset_context_helper(current_user)
     loader = GoogleCalendarReader()
-    documents = loader.load_data(start_date=date.today(), number_of_results=50, user_info=payload['user_info'])
+    node = json.loads(payload['user_info'])
+    documents = loader.load_data(start_date=date.today(), number_of_results=50, user_info=node)
     print(documents)
     if documents == 'Need to login to google':
         return make_response(jsonify({"data": "Need to login to google"}), 200)
