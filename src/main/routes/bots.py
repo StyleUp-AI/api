@@ -16,7 +16,6 @@ from flask_cors import cross_origin
 from sentence_transformers import SentenceTransformer
 from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_container_name, user_sessions
 from src.main.utils.model_actions import train_mode
-SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
 bots_routes = Blueprint("bots_routes", __name__)
 @bots_routes.after_request

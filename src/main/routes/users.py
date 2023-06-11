@@ -14,6 +14,7 @@ from src.main.routes import get_client, user_token_required, html_template, conn
 from werkzeug.security import check_password_hash, generate_password_hash
 from google.oauth2 import id_token
 from google.auth.transport import requests
+SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
 user_routes = Blueprint("user_routes", __name__)
 @user_routes.after_request
