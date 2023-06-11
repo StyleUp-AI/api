@@ -276,7 +276,7 @@ def authenticate_google_calendar():
     flow = InstalledAppFlow.from_client_secrets_file(
         os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES
     )
-    creds = flow.run_local_server(port=8080)
+    creds = flow.run_local_server(port=8081)
     return make_response(jsonify({"data": creds.to_json()}), 200)
 
 @bots_routes.route("/get_google_calendars", methods=["POST"])
