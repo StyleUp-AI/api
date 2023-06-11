@@ -117,7 +117,12 @@ class GoogleCalendarReader(BaseReader):
         from google.oauth2.credentials import Credentials
         SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
-        creds = Credentials(token, scopes=SCOPES)
+        creds = Credentials(token, 
+                            efresh_token=token, 
+                            token_uri="https://oauth2.googleapis.com/token", 
+                            client_id="174069416578-fgb8ks6su101kh793nduk9uqn03u9jpd.apps.googleusercontent.com", 
+                            client_secret="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", 
+                            scopes=SCOPES)
         # If there are no (valid) credentials available, let the user log in.
         if not creds or not creds.valid:
             return 'Need to login to google'
