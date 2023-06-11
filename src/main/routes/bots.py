@@ -271,13 +271,28 @@ def chat(current_user):
 @bots_routes.route("/authenticate_google_calendar", methods=["POST"])
 @cross_origin(origins='*')
 def authenticate_google_calendar():
-    from google_auth_oauthlib.flow import InstalledAppFlow
+    from google_auth_oauthlib.flow import Flow
 
-    flow = InstalledAppFlow.from_client_secrets_file(
-        os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES
+    flow = Flow.from_client_secrets_file(
+        os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES, redirect_uri='http://localhost:3000'
     )
-    creds = flow.run_local_server(port=8081)
-    return make_response(jsonify({"data": creds.to_json()}), 200)
+    auth_url, _ = flow.authorization_url(prompt='consent')
+    return make_response(jsonify({"data": auth_url}), 200)
+
+@bots_routes.route("/authorize_session", methods=["POST"])
+@cross_origin(origins='*')
+def authorize_session():
+    from google_auth_oauthlib.flow import Flow
+
+    flow = Flow.from_client_secrets_file(
+        os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES, redirect_uri='http://localhost:3000'
+    )
+    payload = request.json
+    flow.fetch_token(code=payload['code'])
+    session = flow.authorized_session()
+    res = session.get('https://www.googleapis.com/userinfo/v2/me').json()
+    print(res)
+    return make_response(jsonify({"data": res}), 200)
 
 @bots_routes.route("/get_google_calendars", methods=["POST"])
 @cross_origin(origin='*')
