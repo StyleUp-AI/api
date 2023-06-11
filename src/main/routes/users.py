@@ -180,6 +180,14 @@ def google_sso():
     CLIENT_ID = os.environ.get('GOOGLE_SSO_CLIENT_ID')
     idinfo = id_token.verify_oauth2_token(token, requests.Request(), CLIENT_ID, clock_skew_in_seconds=60)
     user_id = idinfo['sub']
+    from google_auth_oauthlib.flow import Flow
+
+    flow = Flow.from_client_secrets_file(
+        os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES, redirect_uri='http://localhost:3000'
+    )
+    flow.fetch_token(code=token)
+    session = flow.authorized_session()
+    res = session.get('https://www.googleapis.com/userinfo/v2/me').json()
     db = get_client()
     users = db["users"]
     api_key = db['api_keys']
@@ -211,6 +219,7 @@ def google_sso():
                 "access_token": access_token,
                 "refresh_token": refresh_token,
                 "user_id": user_id,
+                "session": res,
             }
         ),
         200,
