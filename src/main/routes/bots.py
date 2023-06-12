@@ -20,7 +20,7 @@ SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 from google_auth_oauthlib.flow import Flow
 
 flow = Flow.from_client_secrets_file(
-    os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES, redirect_uri="https://www.styleup.fun/google_sign_in"
+    os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES, redirect_uri="http://localhost:8080/google_sign_in"
 )
 
 bots_routes = Blueprint("bots_routes", __name__)
@@ -28,7 +28,7 @@ bots_routes = Blueprint("bots_routes", __name__)
 def after_request(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,PATCH,POST,DELETE'
-    response.headers['Access-Control-Allow-Headers'] = 'Origin, X-Requested-With, Content-Type, Accept'
+    response.headers['Access-Control-Allow-Headers'] = '*'
     # Other headers can be added here if needed
     return response
 
