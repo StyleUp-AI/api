@@ -16,15 +16,8 @@ from flask_cors import cross_origin
 from sentence_transformers import SentenceTransformer
 from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_container_name, user_sessions
 from src.main.utils.model_actions import train_mode
-from google_auth_oauthlib.flow import Flow
-import google.auth.transport.requests
-from pip._vendor import cachecontrol
-
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
-flow = Flow.from_client_secrets_file(
-    os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES, redirect_uri='https://style-backend-service.azurewebsites.net/api/bots/authorize_session'
-)
 bots_routes = Blueprint("bots_routes", __name__)
 @bots_routes.after_request
 def after_request(response):
@@ -278,17 +271,13 @@ def chat(current_user):
 @bots_routes.route("/authenticate_google_calendar", methods=["POST"])
 @cross_origin(origins='*')
 def authenticate_google_calendar():
-    
-    auth_url, _ = flow.authorization_url(prompt='consent')
-    return make_response(jsonify({"data": auth_url}), 200)
+    from google_auth_oauthlib.flow import InstalledAppFlow
 
-@bots_routes.route("/authorize_session", methods=["GET"])
-@cross_origin(origins='*')
-def authorize_session():
-    flow.fetch_token(authorization_response=request.url)
-    request_session = requests.session()
-    cached_session = cachecontrol.CacheControl(request_session)
-    return make_response(jsonify({"data": cached_session.json()}), 200)
+    flow = InstalledAppFlow.from_client_secrets_file(
+        os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES
+    )
+    creds = flow.run_local_server(port=8081)
+    return make_response(jsonify({"data": creds.to_json()}), 200)
 
 @bots_routes.route("/get_google_calendars", methods=["POST"])
 @cross_origin(origin='*')
@@ -303,7 +292,8 @@ def get_google_calendars(current_user):
     if current_user['id'] not in user_sessions or 'calendar_context' not in user_sessions[current_user['id']]:
         reset_context_helper(current_user)
     loader = GoogleCalendarReader()
-    documents = loader.load_data(start_date=date.today(), number_of_results=50, user_info=payload['user_info'])
+    node = json.loads(payload['user_info'])
+    documents = loader.load_data(start_date=date.today(), number_of_results=50, user_info=node)
     if documents == 'Need to login to google':
         return make_response(jsonify({"data": "Need to login to google"}), 200)
     if len(documents) == 0:
