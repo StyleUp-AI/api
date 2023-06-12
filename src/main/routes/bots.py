@@ -2,6 +2,7 @@ import asyncio
 import os
 import json
 import urllib
+import requests
 import asyncio, concurrent.futures
 from multiprocessing import Process
 from langchain.document_loaders import AzureBlobStorageFileLoader
@@ -16,8 +17,14 @@ from flask_cors import cross_origin
 from sentence_transformers import SentenceTransformer
 from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_container_name, user_sessions
 from src.main.utils.model_actions import train_mode
+from google_auth_oauthlib.flow import Flow
+from pip._vendor import cachecontrol
+
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
+flow = Flow.from_client_secrets_file(
+    os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES, redirect_uri='https://styleup.fun/api/bots/authorize_session'
+)
 bots_routes = Blueprint("bots_routes", __name__)
 @bots_routes.after_request
 def after_request(response):
@@ -271,17 +278,17 @@ def chat(current_user):
 @bots_routes.route("/authenticate_google_calendar", methods=["POST"])
 @cross_origin(origins='*')
 def authenticate_google_calendar():
-    from google_auth_oauthlib.flow import Flow
+    
+    auth_url, _ = flow.authorization_url(prompt='consent')
+    return make_response(jsonify({"data": auth_url}), 200)
 
-    flow = Flow.from_client_secrets_file(
-        os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES, redirect_uri='http://localhost:3000'
-    )
-    payload = request.json
-    flow.fetch_token(code=payload['code'])
-    session = flow.authorized_session()
-    res = session.get('https://www.googleapis.com/userinfo/v2/me').json()
-    print(res)
-    return make_response(jsonify({"data": res}), 200)
+@bots_routes.route("/authorize_session", methods=["GET"])
+@cross_origin(origins='*')
+def authorize_session():
+    flow.fetch_token(authorization_response=request.url)
+    request_session = requests.session()
+    cached_session = cachecontrol.CacheControl(request_session)
+    return make_response(jsonify({"data": cached_session.json()}), 200)
 
 @bots_routes.route("/get_google_calendars", methods=["POST"])
 @cross_origin(origin='*')
