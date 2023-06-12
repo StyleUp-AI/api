@@ -20,7 +20,7 @@ SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 from google_auth_oauthlib.flow import Flow
 
 flow = Flow.from_client_secrets_file(
-    os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES, redirect_uri="http://localhost:8080/#/google_sign_in"
+    os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES, redirect_uri="http://localhost:8080/google_sign_in"
 )
 
 bots_routes = Blueprint("bots_routes", __name__)
