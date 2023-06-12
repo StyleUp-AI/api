@@ -2,7 +2,6 @@ import asyncio
 import os
 import json
 import urllib
-import requests
 import asyncio, concurrent.futures
 from multiprocessing import Process
 from langchain.document_loaders import AzureBlobStorageFileLoader
@@ -18,6 +17,7 @@ from sentence_transformers import SentenceTransformer
 from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_container_name, user_sessions
 from src.main.utils.model_actions import train_mode
 from google_auth_oauthlib.flow import Flow
+import google.auth.transport.requests
 from pip._vendor import cachecontrol
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
@@ -303,8 +303,7 @@ def get_google_calendars(current_user):
     if current_user['id'] not in user_sessions or 'calendar_context' not in user_sessions[current_user['id']]:
         reset_context_helper(current_user)
     loader = GoogleCalendarReader()
-    node = json.loads(payload['user_info'])
-    documents = loader.load_data(start_date=date.today(), number_of_results=50, user_info=node)
+    documents = loader.load_data(start_date=date.today(), number_of_results=50, user_info=payload['user_info'])
     if documents == 'Need to login to google':
         return make_response(jsonify({"data": "Need to login to google"}), 200)
     if len(documents) == 0:
