@@ -23,7 +23,7 @@ from pip._vendor import cachecontrol
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
 flow = Flow.from_client_secrets_file(
-    os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES, redirect_uri='https://styleup.fun/api/bots/authorize_session'
+    os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES, redirect_uri='https://style-backend-service.azurewebsites.net/api/bots/authorize_session'
 )
 bots_routes = Blueprint("bots_routes", __name__)
 @bots_routes.after_request
