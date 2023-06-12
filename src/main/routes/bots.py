@@ -17,6 +17,11 @@ from sentence_transformers import SentenceTransformer
 from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_container_name, user_sessions
 from src.main.utils.model_actions import train_mode
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+from google_auth_oauthlib.flow import Flow
+
+flow = Flow.from_client_secrets_file(
+    os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES, redirect_uri="http://localhost:3000/api/bots/authorize_session"
+)
 
 bots_routes = Blueprint("bots_routes", __name__)
 @bots_routes.after_request
@@ -271,13 +276,12 @@ def chat(current_user):
 @bots_routes.route("/authenticate_google_calendar", methods=["POST"])
 @cross_origin(origins='*')
 def authenticate_google_calendar():
-    from google_auth_oauthlib.flow import InstalledAppFlow
+    payload = request.json
+    code = payload['code']
+    flow.fetch_token(code=code)
+    session = flow.credentials
+    return make_response(jsonify({"data": session.to_json()}), 200)
 
-    flow = InstalledAppFlow.from_client_secrets_file(
-        os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES
-    )
-    creds = flow.run_local_server(port=8081)
-    return make_response(jsonify({"data": creds.to_json()}), 200)
 
 @bots_routes.route("/get_google_calendars", methods=["POST"])
 @cross_origin(origin='*')
