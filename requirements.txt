@@ -25,3 +25,4 @@ pymongo
 azure-communication-email
 evaluate
 llama_index
+beautifulsoup4
