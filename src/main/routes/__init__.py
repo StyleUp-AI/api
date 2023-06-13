@@ -9,6 +9,7 @@ from langchain.prompts import (
     SystemMessagePromptTemplate, 
     HumanMessagePromptTemplate
 )
+from azure.storage.blob import BlobServiceClient
 from flask import request, jsonify
 from pymongo.mongo_client import MongoClient
 
@@ -30,6 +31,7 @@ uri = (
     + cluster
     + "/?retryWrites=true&w=majority"
 )
+session_token = {}
 
 mongo_client = MongoClient(uri, tlsCAFile=certifi.where())
 #email_client = EmailClient.from_connection_string(azure_email_connection_string)
@@ -48,6 +50,12 @@ html_template = """\
   </body>
 </html>
 """
+
+def upload_to_blob_storage(file_path, file_name, data):
+    destination = file_path + '/' + file_name
+    blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+    blob_client = blob_service_client.get_blob_client(container=azure_container_name, blob=destination)
+    blob_client.upload_blob(data, overwrite=True)
 
 def get_client():
     return mongo_client["poke_chat"]

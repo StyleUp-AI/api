@@ -30,7 +30,6 @@ class GoogleCalendarReader(BaseReader):
 
     def load_data(
         self,
-        user_info,
         number_of_results: Optional[int] = 100,
         start_date: Optional[Union[str, datetime.date]] = None,
     ):
@@ -44,11 +43,9 @@ class GoogleCalendarReader(BaseReader):
 
         from googleapiclient.discovery import build
 
-        credentials = self._get_credentials(user_info)
-        if credentials == 'Need to login to google':
-            return credentials
+        credentials = self._get_credentials()
         service = build("calendar", "v3", credentials=credentials)
-
+        
         if start_date is None:
             start_date = datetime.date.today()
         elif isinstance(start_date, str):
@@ -93,11 +90,11 @@ class GoogleCalendarReader(BaseReader):
                 event_string += f"Organizer: {display_name} ({email})"
             else:
                 event_string += f"Organizer: {email}"
-
             results.append(Document(event_string))
+        
         return results
 
-    def _get_credentials(self, user_info) -> Any:
+    def _get_credentials(self) -> Any:
         """Get valid user credentials from storage.
 
         The file token.json stores the user's access and refresh tokens, and is
@@ -107,21 +104,25 @@ class GoogleCalendarReader(BaseReader):
         Returns:
             Credentials, the obtained credential.
         """
-        if user_info is None:
-            return 'Need to login to google'
+       # if user_info is None:
+        #    return 'Need to login to google'
         from google.auth.transport.requests import Request
         from google.oauth2.credentials import Credentials
+        from google_auth_oauthlib.flow import InstalledAppFlow
 
-        creds = Credentials.from_authorized_user_info(user_info, SCOPES)
+        creds = Credentials.from_authorized_user_file(os.path.join(os.getcwd(), "src/main/routes/token.json"), SCOPES)
+        #creds = Credentials.from_authorized_user_info(user_info, SCOPES)
         # If there are no (valid) credentials available, let the user log in.
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
             else:
-                '''flow = InstalledAppFlow.from_client_secrets_file(
+                flow = InstalledAppFlow.from_client_secrets_file(
                    os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES
                 )
-                creds = flow.run_local_server()'''
-                return 'Need to login to google'
+                creds = flow.run_local_server()
+                #return 'Need to login to google'
+                with open(os.path.join(os.getcwd(), "src/main/routes/token.json"), "w") as token:
+                    token.write(creds.to_json())
 
         return creds
