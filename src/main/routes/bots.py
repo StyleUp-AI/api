@@ -9,16 +9,14 @@ from langchain.chains.question_answering import load_qa_chain
 from langchain.memory import ConversationBufferMemory
 from langchain.llms import OpenAI
 from langchain.chains import ConversationChain
-from azure.storage.blob import BlobServiceClient
 from pathlib import Path
+from azure.storage.blob import BlobServiceClient
 from flask import Blueprint, request, jsonify, make_response
 from flask_cors import cross_origin
 from bs4 import BeautifulSoup
 from sentence_transformers import SentenceTransformer
-from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_container_name, user_sessions, upload_to_blob_storage
+from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_container_name, user_sessions
 from src.main.utils.model_actions import train_mode
-from src.main.routes.crawler import Crawler
-
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 from google_auth_oauthlib.flow import Flow
 
@@ -41,6 +39,12 @@ pool = concurrent.futures.ThreadPoolExecutor()
 # Prepare OpenAI service using credentials stored in the `.env` file
 api_key = os.environ.get("OPENAI_API_KEY")
 org_id = os.environ.get("OPENAI_ORG_ID")
+
+def upload_to_blob_storage(file_path, file_name, data):
+    destination = file_path + '/' + file_name
+    blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+    blob_client = blob_service_client.get_blob_client(container=azure_container_name, blob=destination)
+    blob_client.upload_blob(data, overwrite=True)
 
 def reset_context_helper(current_user):
     global user_sessions
@@ -86,7 +90,7 @@ def update_collection(current_user):
     file_path = "Documents/" + current_user["id"]
     file_name = payload["collection_name"] + ".txt"
     try:
-        upload_to_blob_storage(file_path, file_name, payload["collection_name"])
+        upload_to_blob_storage(file_path, file_name, payload["collection_name"] )
     except Exception as e:
         print(e)
         return make_response(jsonify({"error": "Cannot update the collection"}), 400)
@@ -220,18 +224,14 @@ def add_collection(current_user):
 
     try:
         if payload['collection_type'] == 'link':
-            '''page = urllib.request.urlopen(payload["collection_content"]).read()
+            page = urllib.request.urlopen(payload["collection_content"]).read()
             soup = BeautifulSoup(page, features="html.parser")
             # kill all script and style elements
             for script in soup(["script", "style"]):
                 script.extract()
             text = soup.get_text()
 
-            upload_to_blob_storage(json_file_path, json_file_name, text.strip())'''
-            crawler = Crawler(json_file_path, json_file_name, current_user, [payload["collection_content"]], payload['link_levels'])
-            thread = Process(target=crawler.run)
-            thread.start()
-            return make_response(jsonify({"data": "Web Crawler started"}), 200)
+            upload_to_blob_storage(json_file_path, json_file_name, text.strip())
         elif payload['collection_type'] == 'file':
             file = request.files["collection_content"]
             upload_to_blob_storage(json_file_path, json_file_name, file.read())
@@ -302,13 +302,19 @@ def get_google_calendars(current_user):
     payload = request.json
     from src.main.routes.calendar_reader import GoogleCalendarReader
     from datetime import date
-   
+    if 'user_info' not in payload or payload['user_info'] == '':
+        return make_response(jsonify({"data": "Need to login to google"}), 200)
+    
     if current_user['id'] not in user_sessions or 'calendar_context' not in user_sessions[current_user['id']]:
         reset_context_helper(current_user)
     loader = GoogleCalendarReader()
-   # node = json.loads(payload['user_info'])
-    documents = loader.load_data(start_date=date.today(), number_of_results=50)
-    session = user_sessions[current_user['id']]['calendar_context']
+    node = json.loads(payload['user_info'])
+    documents = loader.load_data(start_date=date.today(), number_of_results=50, user_info=node)
+    if documents == 'Need to login to google':
+        return make_response(jsonify({"data": "Need to login to google"}), 200)
+    if len(documents) == 0:
+        from llama_index.readers.schema.base import Document
+        documents.append(Document('No events'))
     from typing import List
     from langchain.docstore.document import Document as LCDocument
 
@@ -326,14 +332,13 @@ def get_google_calendars(current_user):
     documents = text_splitter.split_documents(formatted_documents)
     
     embeddings = OpenAIEmbeddings()
+    if len(documents) == 0:
+        documents = []
     vector_store = Chroma.from_documents(documents, embeddings)
     
     from langchain.chat_models import ChatOpenAI
-    qa = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo", openai_api_key=api_key, openai_organization=org_id), retriever=vector_store.as_retriever(), memory=session)
-    user_sessions[current_user['id']]['calendar_context'].chat_memory.add_user_message(payload['input'])
-    
+    qa = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo"), retriever=vector_store.as_retriever(), memory=user_sessions[current_user['id']]['calendar_context'])
     result = qa({"question": payload['input']})
-    user_sessions[current_user['id']]['calendar_context'].chat_memory.add_ai_message(result['answer'])
     return make_response(jsonify({"data": result["answer"]}), 200)
 
 @bots_routes.route("/tutor_agent", methods=["POST"])
