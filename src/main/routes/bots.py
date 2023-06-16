@@ -13,7 +13,6 @@ from pathlib import Path
 from azure.storage.blob import BlobServiceClient
 from flask import Blueprint, request, jsonify, make_response
 from flask_cors import cross_origin
-from bs4 import BeautifulSoup
 from sentence_transformers import SentenceTransformer
 from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_container_name, user_sessions
 from src.main.utils.model_actions import train_mode
@@ -202,6 +201,7 @@ def train_collection(current_user):
 @cross_origin(origin='*')
 @user_token_required
 def add_collection(current_user):
+    print(request.headers['Content-Type'])
     payload = {}
     if "multipart/form-data" in request.headers['Content-Type']:
         payload["collection_content"] = "file"
@@ -224,14 +224,8 @@ def add_collection(current_user):
 
     try:
         if payload['collection_type'] == 'link':
-            page = urllib.request.urlopen(payload["collection_content"]).read()
-            soup = BeautifulSoup(page, features="html.parser")
-            # kill all script and style elements
-            for script in soup(["script", "style"]):
-                script.extract()
-            text = soup.get_text()
-
-            upload_to_blob_storage(json_file_path, json_file_name, text.strip())
+            with urllib.request.urlopen(payload["collection_content"]) as f:
+                upload_to_blob_storage(json_file_path, json_file_name, f.read())
         elif payload['collection_type'] == 'file':
             file = request.files["collection_content"]
             upload_to_blob_storage(json_file_path, json_file_name, file.read())
