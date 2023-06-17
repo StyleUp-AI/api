@@ -305,7 +305,6 @@ def get_google_calendars(current_user):
     payload = request.json
     from src.main.routes.calendar_reader import GoogleCalendarReader
     from datetime import date
-
     if current_user['id'] not in user_sessions or 'calendar_context' not in user_sessions[current_user['id']]:
         reset_context_helper(current_user)
     loader = GoogleCalendarReader()
@@ -332,10 +331,10 @@ def get_google_calendars(current_user):
     vector_store = Chroma.from_documents(documents, embeddings)
 
     from langchain.chat_models import ChatOpenAI
-    qa = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=0, model_name="gpt-4", openai_api_key=api_key, openai_organization=org_id), retriever=vector_store.as_retriever(), memory=session)
+    qa = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-0301", openai_api_key=api_key, openai_organization=org_id), retriever=vector_store.as_retriever(), memory=session)
     user_sessions[current_user['id']]['calendar_context'].chat_memory.add_user_message(payload['input'])
 
-    result = qa({"question": payload['input'] + " and filter out the meetings in the past"})
+    result = qa({"question": payload['input'] + ". Please filter out all meetings occured in the past."})
     user_sessions[current_user['id']]['calendar_context'].chat_memory.add_ai_message(result['answer'])
     return make_response(jsonify({"data": result["answer"]}), 200)
 
