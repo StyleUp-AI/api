@@ -1,5 +1,6 @@
 import datetime
 import os
+import pandas as pd
 from typing import Any, List, Optional, Union
 
 from llama_index.readers.base import BaseReader
@@ -45,7 +46,7 @@ class GoogleCalendarReader(BaseReader):
 
         credentials = self._get_credentials()
         service = build("calendar", "v3", credentials=credentials)
-        
+
         if start_date is None:
             start_date = datetime.date.today()
         elif isinstance(start_date, str):
@@ -54,22 +55,19 @@ class GoogleCalendarReader(BaseReader):
         start_datetime = datetime.datetime.combine(start_date, datetime.time.min)
         start_datetime_utc = start_datetime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
-        events_result = (
-            service.events()
-            .list(
+        events_result = service.events().list(
                 calendarId="primary",
                 timeMin=start_datetime_utc,
                 maxResults=number_of_results,
                 singleEvents=False,
-            )
-            .execute()
-        )
+            ).execute()
 
         events = events_result.get("items", [])
         results = []
         for event in events:
             if "dateTime" in event["start"]:
                 start_time = event["start"]["dateTime"]
+
             else:
                 start_time = event["start"]["date"]
 
@@ -91,7 +89,7 @@ class GoogleCalendarReader(BaseReader):
             else:
                 event_string += f"Organizer: {email}"
             results.append(Document(event_string))
-        
+        print(results)
         return results
 
     def _get_credentials(self) -> Any:

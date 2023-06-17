@@ -1,8 +1,8 @@
 import asyncio
 import os
 import json
-import urllib
 import asyncio, concurrent.futures
+import speech_recognition as sr
 from multiprocessing import Process
 from langchain.document_loaders import AzureBlobStorageFileLoader
 from langchain.chains.question_answering import load_qa_chain
@@ -13,17 +13,18 @@ from azure.storage.blob import BlobServiceClient
 from pathlib import Path
 from flask import Blueprint, request, jsonify, make_response
 from flask_cors import cross_origin
-from bs4 import BeautifulSoup
 from sentence_transformers import SentenceTransformer
 from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_container_name, user_sessions, upload_to_blob_storage
 from src.main.utils.model_actions import train_mode
 from src.main.routes.crawler import Crawler
+from langchain.chat_models import ChatOpenAI
+from langchain.chains import ConversationChain
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 from google_auth_oauthlib.flow import Flow
 
 flow = Flow.from_client_secrets_file(
-    os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES, redirect_uri="https://www.styleup.fun/google_sign_in"
+    os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES, redirect_uri="http://localhost:5173/google_sign_in"
 )
 
 bots_routes = Blueprint("bots_routes", __name__)
@@ -49,7 +50,8 @@ def reset_context_helper(current_user):
         'context': ConversationBufferMemory(return_messages=True),
         'prompt_template': sk_prompt,
         'calendar_context': ConversationBufferMemory(memory_key='chat_history', return_messages=True),
-        'tutor_context': ConversationBufferMemory(return_messages=True)
+        'tutor_context': ConversationBufferMemory(return_messages=True),
+        'audio_context': ConversationBufferMemory(return_messages=True),
     }
 
 async def talk_bot(user_input, file_name, current_user, relevance_score):
@@ -71,7 +73,8 @@ async def talk_bot(user_input, file_name, current_user, relevance_score):
         return max_score_item['answer']
     conversation = ConversationChain(memory=conversation_memory, prompt=user_sessions[current_user['id']]['prompt_template'], llm=OpenAI(temperature=0))
     obj = conversation.predict(input=user_input).split("AI: ",1)[1]
-    print(obj)
+    conversation_memory.chat_memory.add_user_message(user_input)
+    conversation_memory.chat_memory.add_ai_message(obj)
     return obj
 
 @bots_routes.route("/update_collection", methods=["PUT"])
@@ -115,7 +118,7 @@ def get_collection(current_user):
     find_collection = next((item for item in current_user['my_files'] if item["name"] == args["collection_name"] + '.txt'), None)
     if find_collection is None:
         return make_response(jsonify({"error": "User doens't own this collection"}), 400)
-    
+
     file_path = "Documents/" + current_user["id"]
     file_name = args["collection_name"] + ".txt"
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
@@ -151,7 +154,7 @@ def delete_collection(current_user):
 
     db = get_client()
     users = db["users"]
-    
+
     current_user["my_files"] = [x for x in current_user["my_files"] if not (file_name == x['name'])]
     users.update_one({'id': current_user['id']}, {'$set': {'my_files': current_user['my_files']}})
     return make_response(jsonify({"data": "File removed successfully"}), 200)
@@ -165,7 +168,7 @@ def train_collection(current_user):
         return make_response(
             jsonify({"error": "Collection name must not be none"}), 400
         )
-    
+
     if 'my_files' not in current_user:
         return make_response(jsonify({"error": "User doens't own this collection"}), 400)
     find_collection = next((item for item in current_user['my_files'] if item["name"] == payload['collection_name'] + '.txt'), None)
@@ -192,7 +195,7 @@ def train_collection(current_user):
     thread = Process(target=train_mode, args=(tmp_path, current_user, payload["collection_name"]))
     thread.start()
     return make_response(jsonify({"data": "Model training request submitted"}), 200)
-    
+
 
 @bots_routes.route("/add_collection", methods=["POST"])
 @cross_origin(origin='*')
@@ -254,7 +257,7 @@ def add_collection(current_user):
 
 @bots_routes.route("/reset_context", methods=["POST"])
 @cross_origin(origin='*')
-@bot_api_key_required
+@user_token_required
 def reset_context(current_user):
     reset_context_helper(current_user)
     return make_response(jsonify({"data": "Context refreshed"}), 200)
@@ -262,7 +265,7 @@ def reset_context(current_user):
 
 @bots_routes.route("/chat", methods=["POST"])
 @cross_origin(origin='*')
-@bot_api_key_required
+@user_token_required
 def chat(current_user):
     payload = request.json
     if payload is None or payload["input"] is None:
@@ -282,7 +285,7 @@ def chat(current_user):
 @bots_routes.route("/authenticate_google_calendar", methods=["POST"])
 @cross_origin(origins='*')
 def authenticate_google_calendar():
-    
+
     #creds = flow.run_local_server(port=8081)
     return make_response(jsonify({"data": flow.authorization_url(prompt='consent')}), 200)
 
@@ -297,17 +300,17 @@ def authorize_session():
 
 @bots_routes.route("/get_google_calendars", methods=["POST"])
 @cross_origin(origin='*')
-@bot_api_key_required
+@user_token_required
 def get_google_calendars(current_user):
     payload = request.json
     from src.main.routes.calendar_reader import GoogleCalendarReader
     from datetime import date
-   
+
     if current_user['id'] not in user_sessions or 'calendar_context' not in user_sessions[current_user['id']]:
         reset_context_helper(current_user)
     loader = GoogleCalendarReader()
    # node = json.loads(payload['user_info'])
-    documents = loader.load_data(start_date=date.today(), number_of_results=50)
+    documents = loader.load_data(number_of_results=50)
     session = user_sessions[current_user['id']]['calendar_context']
     from typing import List
     from langchain.docstore.document import Document as LCDocument
@@ -324,25 +327,23 @@ def get_google_calendars(current_user):
 
     text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
     documents = text_splitter.split_documents(formatted_documents)
-    
+
     embeddings = OpenAIEmbeddings()
     vector_store = Chroma.from_documents(documents, embeddings)
-    
+
     from langchain.chat_models import ChatOpenAI
-    qa = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo", openai_api_key=api_key, openai_organization=org_id), retriever=vector_store.as_retriever(), memory=session)
+    qa = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=0, model_name="gpt-4", openai_api_key=api_key, openai_organization=org_id), retriever=vector_store.as_retriever(), memory=session)
     user_sessions[current_user['id']]['calendar_context'].chat_memory.add_user_message(payload['input'])
-    
-    result = qa({"question": payload['input']})
+
+    result = qa({"question": payload['input'] + " and filter out the meetings in the past"})
     user_sessions[current_user['id']]['calendar_context'].chat_memory.add_ai_message(result['answer'])
     return make_response(jsonify({"data": result["answer"]}), 200)
 
 @bots_routes.route("/tutor_agent", methods=["POST"])
 @cross_origin(origin='*')
-@bot_api_key_required
+@user_token_required
 def tutor_agent(current_user):
     payload = request.json
-    from langchain.chat_models import ChatOpenAI
-    from langchain.chains import ConversationChain
     prompt = json.load(open(os.path.join(os.getcwd(), 'src/main/routes/ranedeer.json'), 'rb'))
     if current_user['id'] not in user_sessions or 'tutor_context' not in user_sessions[current_user['id']]:
         reset_context_helper(current_user)
@@ -351,9 +352,33 @@ def tutor_agent(current_user):
     llm = ChatOpenAI(model_name='gpt-3.5-turbo-0301', openai_api_key=api_key, openai_organization=org_id)
     conversation = ConversationChain(
             llm=llm,
-            verbose=True, 
+            verbose=True,
             memory=user_sessions[current_user['id']]['tutor_context'],
         )
     response = conversation.predict(input=payload['input'])
 
     return make_response(jsonify({"data": response}), 200)
+
+@bots_routes.route("/audio_agent", methods=["POST"])
+@cross_origin(origin='*')
+@user_token_required
+def audio_agent(current_user):
+    if current_user['id'] not in user_sessions:
+        reset_context_helper(current_user)
+    conversation_memory = user_sessions[current_user['id']]['audio_context']
+    file = request.files["audio_file"]
+    r = sr.Recognizer()
+    with sr.AudioFile(file) as source:
+        audio_data = r.record(source)
+        text = r.recognize_google(audio_data)
+        llm = ChatOpenAI(model_name='gpt-3.5-turbo-0301', openai_api_key=api_key, openai_organization=org_id)
+        conversation = ConversationChain(
+                llm=llm,
+                verbose=True,
+                memory=user_sessions[current_user['id']]['audio_context'],
+            )
+        response = conversation.predict(input=text)
+
+        conversation_memory.chat_memory.add_user_message(text)
+        conversation_memory.chat_memory.add_ai_message(response)
+        return make_response(jsonify({"data": response}), 200)
