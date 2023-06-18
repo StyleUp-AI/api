@@ -9,6 +9,7 @@ from langchain.chains.question_answering import load_qa_chain
 from langchain.memory import ConversationBufferMemory
 from langchain.llms import OpenAI
 from langchain.chains import ConversationChain
+from langchain.schema import HumanMessage, AIMessage
 from azure.storage.blob import BlobServiceClient
 from pathlib import Path
 from flask import Blueprint, request, jsonify, make_response
@@ -66,7 +67,6 @@ async def talk_bot(user_input, file_name, current_user, relevance_score):
     results = chain({"input_documents": loaders, "question": user_input}, return_only_outputs=True)
     results = results["intermediate_steps"]
     max_score_item = max(results, key=lambda x:float(x['score']))
-    print(max_score_item)
     if float(max_score_item['score']) >= relevance_score:
         conversation_memory.chat_memory.add_user_message(user_input)
         conversation_memory.chat_memory.add_ai_message(max_score_item['answer'])
@@ -104,6 +104,24 @@ def get_collections(current_user):
         return make_response(jsonify({"data": []}), 200)
     find_collection = [item['name'].split('.')[0] for item in current_user['my_files']]
     return make_response(jsonify({"data": find_collection}), 200)
+
+@bots_routes.route("/get_chat_history", methods=["GET"])
+@cross_origin(origin='*')
+@user_token_required
+def get_chat_history(current_user):
+    if current_user['id'] not in user_sessions:
+        return make_response(jsonify({"data": []}), 200)
+    args = request.args
+    memory = user_sessions[current_user['id']][args['chat_type']]
+    data = memory.load_memory_variables({})
+    res = []
+    if 'history' in data:
+        for item in data['history']:
+            if type(item) is HumanMessage:
+                res.append('Human: ' + item.content)
+            else:
+                res.append('AIMessage: ' + item.content)
+    return make_response(jsonify({"data": res}), 200)
 
 
 @bots_routes.route("/get_collection", methods=["GET"])
