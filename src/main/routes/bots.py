@@ -25,7 +25,7 @@ SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 from google_auth_oauthlib.flow import Flow
 
 flow = Flow.from_client_secrets_file(
-    os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES, redirect_uri="http://localhost:5173/google_sign_in"
+    os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES, redirect_uri="http://localhost:8080/google_sign_in"
 )
 
 bots_routes = Blueprint("bots_routes", __name__)
@@ -326,8 +326,10 @@ def get_google_calendars(current_user):
     if current_user['id'] not in user_sessions or 'calendar_context' not in user_sessions[current_user['id']]:
         reset_context_helper(current_user)
     loader = GoogleCalendarReader()
-   # node = json.loads(payload['user_info'])
-    documents = loader.load_data(number_of_results=50)
+    if "user_info" not in payload or payload["user_info"] == "":
+        return make_response(jsonify({"data": "Need to login to google"}), 200)
+
+    documents = loader.load_data(number_of_results=50, user_info=json.loads(payload["user_info"]))
     session = user_sessions[current_user['id']]['calendar_context']
     from typing import List
     from langchain.docstore.document import Document as LCDocument
