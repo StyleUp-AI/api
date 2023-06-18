@@ -83,8 +83,8 @@ def get_otp():
     poller = client.begin_send(message)
     print(poller.result())
     return make_response(jsonify({"data": "Otp sent"}), 200)
-    
-    
+
+
 
 @user_routes.route("/verify_otp", methods=["POST"])
 @cross_origin(origin='*')
@@ -189,7 +189,7 @@ def google_sso():
         )
         api_key.insert_one({"key": secrets.token_urlsafe(32), "user_id": user_id})
 
- 
+
     access_token = jwt.encode(
         {"user_id": user_id, "exp": datetime.utcnow() + timedelta(days=7)},
         os.environ.get("SECRET_KEY"),
@@ -215,7 +215,35 @@ def google_sso():
         ),
         200,
     )
-    
+
+@user_routes.route("/early_access", methods=["POST"])
+@cross_origin(origin='*')
+def early_access():
+    payload = request.json
+    if not payload or not payload['name'] or not payload['email'] or not payload['task']:
+        return make_response(
+            jsonify({"error": "Must provide user name, email, and task preference"}), 400, None
+        )
+    db = get_client()
+    early_schema = db["early_schema"]
+    find_early = early_schema.find_one({"email": payload['email']})
+    if find_early:
+        return make_response(
+            jsonify({"error": "You have registered the early access with email: " + payload["email"]}),
+            400,
+        )
+    new_id = str(uuid.uuid4())
+    early_schema.insert_one({"id": new_id, "email": payload["email"], "task": payload['task']})
+    return make_response(
+        jsonify(
+            {
+                "data": "Early access registered",
+            }
+        ),
+        200,
+    )
+
+
 @user_routes.route("/signin", methods=["POST"])
 @cross_origin(origin='*')
 def signin():
