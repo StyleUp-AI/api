@@ -10,7 +10,7 @@ from azure.storage.blob import BlobServiceClient
 from flask import Blueprint, request, jsonify, make_response, redirect, url_for
 from flask_cors import cross_origin
 from datetime import datetime, timedelta
-from src.main.routes import get_client, user_token_required, html_template, connection_string, azure_container_name
+from src.main.routes import get_client, user_token_required, html_template, connection_string, azure_container_name, azure_email_connection_string
 from werkzeug.security import check_password_hash, generate_password_hash
 from google.oauth2 import id_token
 from google.auth.transport import requests
@@ -241,7 +241,6 @@ def early_access():
         )
     new_id = str(uuid.uuid4())
     early_schema.insert_one({"id": new_id, "email": payload["email"], "task": payload['task'], "want_email": "yes"})
-    azure_email_connection_string = os.environ.get("AZURE_EMAIL_CONNECTION_STRING")
     early_email_template = open(os.path.join(os.getcwd(), 'src/main/constants/styleUp_email.html'), 'r', encoding='utf-8').read()
     client = EmailClient.from_connection_string(azure_email_connection_string)
     message = {
