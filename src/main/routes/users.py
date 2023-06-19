@@ -243,13 +243,12 @@ def early_access():
     early_schema.insert_one({"id": new_id, "email": payload["email"], "task": payload['task'], "want_email": "yes"})
     azure_email_connection_string = os.environ.get("AZURE_EMAIL_CONNECTION_STRING")
     early_email_template = open(os.path.join(os.getcwd(), 'src/main/constants/styleUp_email.html'), 'r', encoding='utf-8').read()
-    print(early_email_template)
     client = EmailClient.from_connection_string(azure_email_connection_string)
     message = {
         'content': {
             'subject': 'Thank you for your interest in StyleUp',
             'plainText': "StyleUp AI, a no-code solution in which anyone could create, deploy, and manage large language model (LLM) agents in less than five minutes. StyleUp isn't just another simple AI builder but a comprehensive platform that allows you to connect and integrate your own private and unique dataset, creating AI agents tailored to your specific use cases and it’s coming soon! You’ll be one of the first to get early access in the next few days. As soon as the platform is ready for the official launch, you will be notified by email. \n\nBest regards,",
-            'html': Template(early_email_template).safe_substitute(link = os.environ.get("API_DOMAIN") + "/api/users/unsubscribe?id=" + new_id)
+            'html': Template(early_email_template).safe_substitute(link = "https://witty-glacier-0ff63b30f.3.azurestaticapps.net/api/users/unsubscribe?id=" + new_id)
         },
         'recipients': {
             'to': [
