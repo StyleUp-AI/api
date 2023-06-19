@@ -285,7 +285,9 @@ def chat(current_user):
     #find_collection = next((item for item in current_user['my_files'] if item["name"] == file_name), None)
     #if find_collection is None:
       #  return make_response(jsonify({"error": "User does't have this file"}), 400)
-    relevance_score = payload['relevance_score'] or 0.8
+    relevance_score = 0.8
+    if 'relevance_score' in payload:
+        relevance_score = payload['relevance_score']
     file_name = "Documents/" + current_user["id"] + '/' + file_name
     result = pool.submit(
         asyncio.run, talk_bot(payload["input"], file_name, current_user, relevance_score * 100)
