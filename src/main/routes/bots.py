@@ -41,7 +41,7 @@ def reset_context_helper(current_user):
     global user_sessions
     global sk_prompt
     user_sessions[current_user['id']] = {
-        'context': ConversationBufferMemory(return_messages=True),
+        'context': {},
         'prompt_template': sk_prompt,
         'calendar_context': ConversationBufferMemory(memory_key='chat_history', return_messages=True),
         'tutor_context': ConversationBufferMemory(return_messages=True),
@@ -53,7 +53,9 @@ async def talk_bot(user_input, file_name, current_user, relevance_score):
     global llm
     if current_user['id'] not in user_sessions:
         reset_context_helper(current_user)
-    conversation_memory = user_sessions[current_user['id']]['context']
+    if file_name not in user_sessions[current_user['id']]['context']:
+        user_sessions[current_user['id']]['context'][file_name] = ConversationBufferMemory(return_messages=True)
+    conversation_memory = user_sessions[current_user['id']]['context'][file_name]
     az_loaders = AzureBlobStorageFileLoader(connection_string, azure_container_name, file_name)
     loaders = az_loaders.load()
     chain = load_qa_chain(OpenAI(temperature=0), chain_type="map_rerank", return_intermediate_steps=True)
@@ -320,8 +322,11 @@ def get_google_calendars(current_user):
     from datetime import date
     if current_user['id'] not in user_sessions or 'calendar_context' not in user_sessions[current_user['id']]:
         reset_context_helper(current_user)
+
+    user_sessions[current_user['id']]['calendar_context'].chat_memory.add_user_message(payload['input'])
     loader = GoogleCalendarReader()
     if "user_info" not in payload or payload["user_info"] == "":
+        user_sessions[current_user['id']]['calendar_context'].chat_memory.add_ai_message("Need to login to google")
         return make_response(jsonify({"data": "Need to login to google"}), 200)
 
     documents = loader.load_data(number_of_results=50, user_info=json.loads(payload["user_info"]))
@@ -347,8 +352,6 @@ def get_google_calendars(current_user):
 
     from langchain.chat_models import ChatOpenAI
     qa = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo", openai_api_key=api_key, openai_organization=org_id), retriever=vector_store.as_retriever(), memory=session)
-    user_sessions[current_user['id']]['calendar_context'].chat_memory.add_user_message(payload['input'])
-
     result = qa({"question": payload['input']})
     user_sessions[current_user['id']]['calendar_context'].chat_memory.add_ai_message(result['answer'])
     return make_response(jsonify({"data": result["answer"]}), 200)
