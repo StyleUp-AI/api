@@ -256,7 +256,7 @@ def early_access():
         'content': {
             'subject': 'Thank you for your interest in StyleUp',
             'plainText': "StyleUp AI, a no-code solution in which anyone could create, deploy, and manage large language model (LLM) agents in less than five minutes. StyleUp isn't just another simple AI builder but a comprehensive platform that allows you to connect and integrate your own private and unique dataset, creating AI agents tailored to your specific use cases and it’s coming soon! You’ll be one of the first to get early access in the next few days. As soon as the platform is ready for the official launch, you will be notified by email. \n\nBest regards,",
-            'html': Template(early_email_template).safe_substitute(link = "http://localhost:3000/api/users/unsubscribe?id=" + new_id)
+            'html': Template(early_email_template).safe_substitute(link = "https://www.styleup.fun/api/users/unsubscribe?id=" + new_id)
         },
         'recipients': {
             'to': [
