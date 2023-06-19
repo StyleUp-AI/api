@@ -4,9 +4,9 @@ import jwt
 from urllib.parse import quote_plus
 from functools import wraps
 from langchain.prompts import (
-    ChatPromptTemplate, 
-    MessagesPlaceholder, 
-    SystemMessagePromptTemplate, 
+    ChatPromptTemplate,
+    MessagesPlaceholder,
+    SystemMessagePromptTemplate,
     HumanMessagePromptTemplate
 )
 from azure.storage.blob import BlobServiceClient
@@ -21,6 +21,7 @@ azure_account_key = os.environ.get("AZURE_ACCOUNT_KEY")
 azure_account_name = os.environ.get("AZURE_ACCOUNT_NAME")
 azure_container_name = os.environ.get("AZURE_CONTAINER")
 azure_email_connection_string = os.environ.get("AZURE_EMAIL_CONNECTION_STRING")
+google_redirect_url = os.environ.get("API_DOMAIN")
 
 uri = (
     "mongodb+srv://"

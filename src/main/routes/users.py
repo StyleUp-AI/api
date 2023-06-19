@@ -10,7 +10,7 @@ from azure.storage.blob import BlobServiceClient
 from flask import Blueprint, request, jsonify, make_response, redirect, url_for
 from flask_cors import cross_origin
 from datetime import datetime, timedelta
-from src.main.routes import get_client, user_token_required, html_template, connection_string, azure_container_name, azure_email_connection_string
+from src.main.routes import get_client, user_token_required, html_template, connection_string, azure_container_name, azure_email_connection_string, google_redirect_url
 from werkzeug.security import check_password_hash, generate_password_hash
 from google.oauth2 import id_token
 from google.auth.transport import requests
@@ -247,7 +247,7 @@ def early_access():
         'content': {
             'subject': 'Thank you for your interest in StyleUp',
             'plainText': "StyleUp AI, a no-code solution in which anyone could create, deploy, and manage large language model (LLM) agents in less than five minutes. StyleUp isn't just another simple AI builder but a comprehensive platform that allows you to connect and integrate your own private and unique dataset, creating AI agents tailored to your specific use cases and it’s coming soon! You’ll be one of the first to get early access in the next few days. As soon as the platform is ready for the official launch, you will be notified by email. \n\nBest regards,",
-            'html': Template(early_email_template).safe_substitute(link = "https://witty-glacier-0ff63b30f.3.azurestaticapps.net/api/users/unsubscribe?id=" + new_id)
+            'html': Template(early_email_template).safe_substitute(link =  + new_id)
         },
         'recipients': {
             'to': [

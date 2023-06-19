@@ -346,7 +346,7 @@ def get_google_calendars(current_user):
     vector_store = Chroma.from_documents(documents, embeddings)
 
     from langchain.chat_models import ChatOpenAI
-    qa = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-0301", openai_api_key=api_key, openai_organization=org_id), retriever=vector_store.as_retriever(), memory=session)
+    qa = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo", openai_api_key=api_key, openai_organization=org_id), retriever=vector_store.as_retriever(), memory=session)
     user_sessions[current_user['id']]['calendar_context'].chat_memory.add_user_message(payload['input'])
 
     result = qa({"question": payload['input']})
@@ -363,7 +363,7 @@ def tutor_agent(current_user):
         reset_context_helper(current_user)
         user_sessions[current_user['id']]['tutor_context'].chat_memory.add_ai_message(json.dumps(prompt, indent=2, default=str, ensure_ascii=False))
 
-    llm = ChatOpenAI(model_name='gpt-3.5-turbo-0301', openai_api_key=api_key, openai_organization=org_id)
+    llm = ChatOpenAI(model_name='gpt-3.5-turbo', openai_api_key=api_key, openai_organization=org_id)
     conversation = ConversationChain(
             llm=llm,
             verbose=True,
