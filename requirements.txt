@@ -27,3 +27,4 @@ evaluate
 llama_index
 beautifulsoup4
 SpeechRecognition
+googleapiclient
