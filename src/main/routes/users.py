@@ -16,13 +16,6 @@ from google.oauth2 import id_token
 from google.auth.transport import requests
 
 user_routes = Blueprint("user_routes", __name__)
-@user_routes.after_request
-def after_request(response):
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,PATCH,POST,DELETE'
-    response.headers['Access-Control-Allow-Headers'] = '*'
-    # Other headers can be added here if needed
-    return response
 
 @user_routes.route("/signup", methods=["POST"])
 @cross_origin(origin='*')

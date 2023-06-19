@@ -29,13 +29,6 @@ flow = Flow.from_client_secrets_file(
 )
 
 bots_routes = Blueprint("bots_routes", __name__)
-@bots_routes.after_request
-def after_request(response):
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,PATCH,POST,DELETE'
-    response.headers['Access-Control-Allow-Headers'] = '*'
-    # Other headers can be added here if needed
-    return response
 
 model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 pool = concurrent.futures.ThreadPoolExecutor()
