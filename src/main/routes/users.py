@@ -4,9 +4,10 @@ import jwt
 import os
 import uuid
 import random
+from string import Template
 from azure.communication.email import EmailClient
 from azure.storage.blob import BlobServiceClient
-from flask import Blueprint, request, jsonify, make_response
+from flask import Blueprint, request, jsonify, make_response, redirect, url_for
 from flask_cors import cross_origin
 from datetime import datetime, timedelta
 from src.main.routes import get_client, user_token_required, html_template, connection_string, azure_container_name
@@ -216,6 +217,19 @@ def google_sso():
         200,
     )
 
+@user_routes.route("/unsubscribe", methods=["GET"])
+@cross_origin(origin='*')
+def unsubscribe():
+    args = request.args
+    if not args or not args['id']:
+        return redirect(url_for('.cannotunsubscribe', messages="Cannot unsubscribe"))
+    db = get_client()
+    early_schema = db["early_schema"]
+    early_schema.update_one({'id': args['id']}, {"$set": {"want_email": "no"}})
+    return make_response(jsonify({"data": "unsubscribe success!"}), 200)
+
+
+
 @user_routes.route("/early_access", methods=["POST"])
 @cross_origin(origin='*')
 def early_access():
@@ -233,7 +247,28 @@ def early_access():
             400,
         )
     new_id = str(uuid.uuid4())
-    early_schema.insert_one({"id": new_id, "email": payload["email"], "task": payload['task']})
+    early_schema.insert_one({"id": new_id, "email": payload["email"], "task": payload['task'], "want_email": "yes"})
+    azure_email_connection_string = os.environ.get("AZURE_EMAIL_CONNECTION_STRING")
+    early_email_template = open(os.path.join(os.getcwd(), 'src/main/constants/styleUp_email.html'), 'r', encoding='utf-8').read()
+    print(early_email_template)
+    client = EmailClient.from_connection_string(azure_email_connection_string)
+    message = {
+        'content': {
+            'subject': 'Thank you for your interest in StyleUp',
+            'plainText': "StyleUp AI, a no-code solution in which anyone could create, deploy, and manage large language model (LLM) agents in less than five minutes. StyleUp isn't just another simple AI builder but a comprehensive platform that allows you to connect and integrate your own private and unique dataset, creating AI agents tailored to your specific use cases and it’s coming soon! You’ll be one of the first to get early access in the next few days. As soon as the platform is ready for the official launch, you will be notified by email. \n\nBest regards,",
+            'html': Template(early_email_template).safe_substitute(link = "http://localhost:3000/api/users/unsubscribe?id=" + new_id)
+        },
+        'recipients': {
+            'to': [
+                {
+                    'address': payload["email"],
+                    'displayName': 'Styleup AI'
+                }
+            ]
+        },
+        'senderAddress': 'noreply@styleup.fun'
+    }
+    poller = client.begin_send(message)
     return make_response(
         jsonify(
             {
