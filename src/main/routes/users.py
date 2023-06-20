@@ -17,6 +17,13 @@ from google.auth.transport import requests
 
 user_routes = Blueprint("user_routes", __name__)
 
+
+@user_routes.route("/log_event", methods=["POST"])
+@cross_origin(origin='*')
+def log_event():
+    print(request.json)
+    return make_response(jsonify({"data": "success"}), 200)
+
 @user_routes.route("/signup", methods=["POST"])
 @cross_origin(origin='*')
 def signup():
