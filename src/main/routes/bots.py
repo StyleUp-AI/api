@@ -335,7 +335,7 @@ def get_google_calendars(current_user):
     from datetime import date
     if current_user['id'] not in user_sessions:
         reset_context_helper(current_user)
-
+    
     user_sessions[current_user['id']]['calendar_context'].chat_memory.add_user_message(payload['input'])
     loader = GoogleCalendarReader()
     if "user_info" not in payload or payload["user_info"] == "":
