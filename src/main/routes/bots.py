@@ -43,7 +43,7 @@ def reset_context_helper(current_user):
     user_sessions[current_user['id']] = {
         'context': {},
         'prompt_template': sk_prompt,
-        'calendar_context': ConversationBufferMemory(memory_key='chat_history', return_messages=True),
+        'calendar_context': ConversationBufferMemory(return_messages=True),
         'tutor_context': ConversationBufferMemory(return_messages=True),
         'audio_context': ConversationBufferMemory(return_messages=True),
     }
