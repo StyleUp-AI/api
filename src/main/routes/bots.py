@@ -48,6 +48,26 @@ def reset_context_helper(current_user):
         'audio_context': ConversationBufferMemory(return_messages=True),
     }
 
+def reset_one_context(current_user, context):
+    global user_sessions
+    global sk_prompt
+    if current_user['id'] not in user_sessions:
+        reset_context_helper(current_user)
+        return
+
+    if context == 'context':
+        user_sessions[current_user['id']]['context'] = {}
+    elif context == 'prompt_template':
+        user_sessions[current_user['id']]['prompt_template'] = sk_prompt
+    elif context == 'calendar_context':
+        user_sessions[current_user['id']]['calendar_context'] = ConversationBufferMemory(return_messages=True)
+    elif context == 'tutor_context':
+        user_sessions[current_user['id']]['tutor_context'] = ConversationBufferMemory(return_messages=True)
+        user_sessions[current_user['id']]['tutor_context'].chat_memory.add_ai_message(json.dumps(prompt, indent=2, default=str, ensure_ascii=False))
+    elif context == 'audio_context':
+        user_sessions[current_user['id']]['audio_context'] = ConversationBufferMemory(return_messages=True)
+
+
 async def talk_bot(user_input, file_name, current_user, relevance_score):
     global user_sessions
     global llm
@@ -236,14 +256,6 @@ def add_collection(current_user):
 
     try:
         if payload['collection_type'] == 'link':
-            '''page = urllib.request.urlopen(payload["collection_content"]).read()
-            soup = BeautifulSoup(page, features="html.parser")
-            # kill all script and style elements
-            for script in soup(["script", "style"]):
-                script.extract()
-            text = soup.get_text()
-
-            upload_to_blob_storage(json_file_path, json_file_name, text.strip())'''
             crawler = Crawler(json_file_path, json_file_name, current_user, [payload["collection_content"]], payload['link_levels'])
             thread = Process(target=crawler.run)
             thread.start()
@@ -272,7 +284,8 @@ def add_collection(current_user):
 @cross_origin(origin='*')
 @user_token_required
 def reset_context(current_user):
-    reset_context_helper(current_user)
+    payload = request.json
+    reset_one_context(current_user, payload["context"])
     return make_response(jsonify({"data": "Context refreshed"}), 200)
 
 
@@ -320,7 +333,7 @@ def get_google_calendars(current_user):
     payload = request.json
     from src.main.routes.calendar_reader import GoogleCalendarReader
     from datetime import date
-    if current_user['id'] not in user_sessions or 'calendar_context' not in user_sessions[current_user['id']]:
+    if current_user['id'] not in user_sessions:
         reset_context_helper(current_user)
 
     user_sessions[current_user['id']]['calendar_context'].chat_memory.add_user_message(payload['input'])
