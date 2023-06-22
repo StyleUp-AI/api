@@ -6,16 +6,16 @@ bcrypt==4.0.1
 pyjwt==2.7.0
 sentence-transformers==2.2.2
 pandas>= 2.0.1
-numpy
-scikit-learn
-azure-storage-blob
-tensorflow
+numpy==1.24.3
+scikit-learn==1.2.2
+azure-storage-blob==12.16.0
+tensorflow==2.13.0rc0
 datasets
 transformers
 sentencepiece
 accelerate
 langchain
-unstructured
+unstructured==0.7.1
 pdf2image
 tiktoken
 tabulate
