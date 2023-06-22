@@ -55,18 +55,20 @@ def reset_one_context(current_user, context):
         reset_context_helper(current_user)
         return
 
+    tmp_sessions = user_sessions
     if context == 'context':
-        user_sessions[current_user['id']]['context'] = {}
+        tmp_sessions[current_user['id']]['context'] = {}
     elif context == 'prompt_template':
-        user_sessions[current_user['id']]['prompt_template'] = sk_prompt
+        tmp_sessions[current_user['id']]['prompt_template'] = sk_prompt
     elif context == 'calendar_context':
-        user_sessions[current_user['id']]['calendar_context'] = ConversationBufferMemory(return_messages=True)
+        tmp_sessions[current_user['id']]['calendar_context'].clear()
     elif context == 'tutor_context':
-        user_sessions[current_user['id']]['tutor_context'] = ConversationBufferMemory(return_messages=True)
-        user_sessions[current_user['id']]['tutor_context'].chat_memory.add_ai_message(json.dumps(prompt, indent=2, default=str, ensure_ascii=False))
+        tmp_sessions[current_user['id']]['tutor_context'].clear()
+        prompt = json.load(open(os.path.join(os.getcwd(), 'src/main/routes/ranedeer.json'), 'rb'))
+        tmp_sessions[current_user['id']]['tutor_context'].chat_memory.add_ai_message(json.dumps(prompt, indent=2, default=str, ensure_ascii=False))
     elif context == 'audio_context':
-        user_sessions[current_user['id']]['audio_context'] = ConversationBufferMemory(return_messages=True)
-
+        tmp_sessions[current_user['id']]['audio_context'].clear()
+    user_sessions = tmp_sessions
 
 async def talk_bot(user_input, file_name, current_user, relevance_score):
     global user_sessions
@@ -128,13 +130,14 @@ def get_chat_history(current_user):
         return make_response(jsonify({"data": []}), 200)
     args = request.args
     memory = user_sessions[current_user['id']][args['chat_type']]
+    prompt = json.load(open(os.path.join(os.getcwd(), 'src/main/routes/ranedeer.json'), 'rb'))
     data = memory.load_memory_variables({})
     res = []
     if 'history' in data:
         for item in data['history']:
             if type(item) is HumanMessage:
                 res.append('Human: ' + item.content)
-            else:
+            elif item.content != json.dumps(prompt, indent=2, default=str, ensure_ascii=False):
                 res.append('AIMessage: ' + item.content)
     return make_response(jsonify({"data": res}), 200)
 
