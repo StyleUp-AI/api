@@ -160,8 +160,8 @@ def get_collection(current_user):
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
     container_client = blob_service_client.get_container_client(azure_container_name)
     blob_client = container_client.get_blob_client(file_path + '/' + file_name)
-    res = blob_client.download_blob().readall()
-    return make_response(jsonify({"data": str(res)}), 200)
+    res = blob_client.download_blob(max_concurrency=1, encoding='UTF-8').readall()
+    return make_response(jsonify({"data": res}), 200)
 
 
 @bots_routes.route("/delete_collection", methods=["DELETE"])
