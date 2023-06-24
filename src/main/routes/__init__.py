@@ -68,18 +68,29 @@ def user_token_required(f):
         token = None
         if "x-access-token" in request.headers:
             token = request.headers["x-access-token"]
-        if not token:
+            db = get_client()
+            users = db["users"]
+            try:
+                data = jwt.decode(token, os.environ.get("SECRET_KEY"), algorithms=["HS256"])
+                current_user = users.find_one({"id": data["user_id"]})
+            except Exception as e:
+                print(e)
+                return jsonify({"error": "Token is invalid !!"}), 401
+            return f(current_user, *args, **kwargs)
+        elif "bot-api-key" in request.headers:
+            token = request.headers["bot-api-key"]
+            db = get_client()
+            keys = db["api_keys"]
+            users = db["users"]
+            try:
+                api_key = keys.find_one({"key": token})
+                current_user = users.find_one({"id": api_key["user_id"]})
+            except Exception as e:
+                print(e)
+                return jsonify({"error": "API Key is invalid !!"}), 401
+            return f(current_user, *args, **kwargs)
+        else:
             return jsonify({"error": "Token is missing !!"}), 401
-
-        db = get_client()
-        users = db["users"]
-        try:
-            data = jwt.decode(token, os.environ.get("SECRET_KEY"), algorithms=["HS256"])
-            current_user = users.find_one({"id": data["user_id"]})
-        except Exception as e:
-            print(e)
-            return jsonify({"error": "Token is invalid !!"}), 401
-        return f(current_user, *args, **kwargs)
 
     return decorated
 
