@@ -6,7 +6,7 @@ from src.main.routes import upload_to_blob_storage, get_client
 from bs4 import BeautifulSoup
 
 class Crawler:
-    def __init__(self, file_path, file_name, current_user, urls=[], layers=1):
+    def __init__(self, file_path, file_name, current_user, collection_name, urls=[], layers=1):
         self.visited_urls = []
         self.urls_to_visit = urls
         self.layers = layers
@@ -14,10 +14,11 @@ class Crawler:
         self.file_path = file_path
         self.file_name = file_name
         self.current_user = current_user
-    
+        self.collection_name = collection_name
+
     def download_url(self, url):
         return requests.get(url).text
-    
+
     def get_linked_urls(self, url, html):
         soup = BeautifulSoup(html, 'html.parser')
          # kill all script and style elements
@@ -29,11 +30,11 @@ class Crawler:
             if path and path.startswith('/'):
                 path = urljoin(url, path)
             yield path
-    
+
     def add_url_to_visit(self, url):
         if url not in self.visited_urls and url not in self.urls_to_visit:
             self.urls_to_visit.append(url)
-    
+
     def crawl(self, url):
         html = self.download_url(url)
         for url in self.get_linked_urls(url, html):
@@ -56,14 +57,14 @@ class Crawler:
         for item in self.content:
             file_content += item
             file_content += '\n'
-        print(file_content)
+        
         upload_to_blob_storage(self.file_path, self.file_name, file_content)
         db = get_client()
         users = db["users"]
         if "my_files" in self.current_user:
-            self.current_user["my_files"].append({'name': self.file_name, 'model': ''})
+            self.current_user["my_files"].append({'name': self.collection_name, 'model': ''})
         else:
-            self.current_user["my_files"] = [{'name': self.file_name, 'model': ''}]
+            self.current_user["my_files"] = [{'name': self.collection_name, 'model': ''}]
         users.update_one(
             {"id": self.current_user["id"]}, {"$set": {"my_files": self.current_user["my_files"]}}
         )
@@ -87,5 +88,3 @@ class Crawler:
         }
         poller = client.begin_send(message)
         print(poller.result())
-        
-        

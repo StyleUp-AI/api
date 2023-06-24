@@ -12,6 +12,7 @@ from langchain.chains import ConversationChain
 from langchain.schema import HumanMessage, AIMessage
 from azure.storage.blob import BlobServiceClient
 from pathlib import Path
+from PyPDF2 import PdfReader
 from flask import Blueprint, request, jsonify, make_response
 from flask_cors import cross_origin
 from sentence_transformers import SentenceTransformer
@@ -151,8 +152,11 @@ def get_collection(current_user):
         return make_response(jsonify({"error": "Must provide collection name"}), 400)
     if 'my_files' not in current_user:
         return make_response(jsonify({"error": "User doens't own this collection"}), 400)
-    find_collection = next((item for item in current_user['my_files'] if item["name"] == args["collection_name"] + '.txt'), None)
-    if find_collection is None:
+    found = False
+    for item in current_user['my_files']:
+        if item['name'] == args["collection_name"] + '.txt':
+            found = True
+    if found == False:
         return make_response(jsonify({"error": "User doens't own this collection"}), 400)
 
     file_path = "Documents/" + current_user["id"]
@@ -259,13 +263,26 @@ def add_collection(current_user):
 
     try:
         if payload['collection_type'] == 'link':
-            crawler = Crawler(json_file_path, json_file_name, current_user, [payload["collection_content"]], payload['link_levels'])
+            collection_name = json_file_name
+            if "collection_name" in payload:
+                collection_name = payload["collection_name"]
+            crawler = Crawler(json_file_path, json_file_name, current_user, collection_name, [payload["collection_content"]], payload['link_levels'])
             thread = Process(target=crawler.run)
             thread.start()
             return make_response(jsonify({"data": "Web Crawler started"}), 200)
         elif payload['collection_type'] == 'file':
             file = request.files["collection_content"]
-            upload_to_blob_storage(json_file_path, json_file_name, file.read())
+            file_name, file_extension = os.path.splitext(file.filename)
+            if file_extension == '.pdf':
+                reader = PdfReader(file)
+                text = ""
+                for page in reader.pages:
+                    text += page.extract_text()
+                    text += '\n'
+                upload_to_blob_storage(json_file_path, json_file_name, text)
+            else:
+                content = file.read()
+                upload_to_blob_storage(json_file_path, json_file_name, content)
         else:
             upload_to_blob_storage(json_file_path, json_file_name, payload["collection_content"])
     except Exception as e:
@@ -274,9 +291,9 @@ def add_collection(current_user):
     db = get_client()
     users = db["users"]
     if "my_files" in current_user:
-        current_user["my_files"].append({'name': json_file_name, 'model': ''})
+        current_user["my_files"].append({'name': payload["collection_name"] + ".txt", 'model': ''})
     else:
-        current_user["my_files"] = [{'name': json_file_name, 'model': ''}]
+        current_user["my_files"] = [{'name': payload["collection_name"] + ".txt", 'model': ''}]
     users.update_one(
         {"id": current_user["id"]}, {"$set": {"my_files": current_user["my_files"]}}
     )
