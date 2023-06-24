@@ -136,7 +136,10 @@ def get_chat_history(current_user):
     elif 'context' not in user_sessions[current_user['id']] or not user_sessions[current_user['id']]['context']:
         return make_response(jsonify({"data": []}), 200)
     else:
-        memory = user_sessions[current_user['id']]['context'][args['file_name']]
+        if args['file_name'] in user_sessions[current_user['id']]['context']:
+            memory = user_sessions[current_user['id']]['context'][args['file_name']]
+        else:
+            return make_response(jsonify({"data": []}), 200)
     prompt = json.load(open(os.path.join(os.getcwd(), 'src/main/routes/ranedeer.json'), 'rb'))
     data = memory.load_memory_variables({})
     res = []
