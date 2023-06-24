@@ -71,14 +71,14 @@ def reset_one_context(current_user, context):
         tmp_sessions[current_user['id']]['audio_context'].clear()
     user_sessions = tmp_sessions
 
-async def talk_bot(user_input, file_name, current_user, relevance_score):
+async def talk_bot(user_input, file_name, current_user, collection_name, relevance_score):
     global user_sessions
     global llm
     if current_user['id'] not in user_sessions:
         reset_context_helper(current_user)
     if file_name not in user_sessions[current_user['id']]['context']:
-        user_sessions[current_user['id']]['context'][file_name] = ConversationBufferMemory(return_messages=True)
-    conversation_memory = user_sessions[current_user['id']]['context'][file_name]
+        user_sessions[current_user['id']]['context'][collection_name] = ConversationBufferMemory(return_messages=True)
+    conversation_memory = user_sessions[current_user['id']]['context'][collection_name]
     az_loaders = AzureBlobStorageFileLoader(connection_string, azure_container_name, file_name)
     loaders = az_loaders.load()
     chain = load_qa_chain(OpenAI(temperature=0), chain_type="map_rerank", return_intermediate_steps=True)
@@ -130,7 +130,13 @@ def get_chat_history(current_user):
     if current_user['id'] not in user_sessions:
         return make_response(jsonify({"data": []}), 200)
     args = request.args
-    memory = user_sessions[current_user['id']][args['chat_type']]
+    memory = None
+    if args['chat_type'] != 'context':
+        memory = user_sessions[current_user['id']][args['chat_type']]
+    elif 'context' not in user_sessions[current_user['id']] or not user_sessions[current_user['id']]['context']:
+        return make_response(jsonify({"data": []}), 200)
+    else:
+        memory = user_sessions[current_user['id']]['context'][args['file_name']]
     prompt = json.load(open(os.path.join(os.getcwd(), 'src/main/routes/ranedeer.json'), 'rb'))
     data = memory.load_memory_variables({})
     res = []
@@ -325,7 +331,7 @@ def chat(current_user):
         relevance_score = payload['relevance_score']
     file_name = "Documents/" + current_user["id"] + '/' + file_name
     result = pool.submit(
-        asyncio.run, talk_bot(payload["input"], file_name, current_user, relevance_score * 100)
+        asyncio.run, talk_bot(payload["input"], file_name, current_user, payload["collection_name"], relevance_score * 100)
     ).result()
     #result = await talk_bot(payload["input"], file_name, payload["relevance_score"])
     return make_response(jsonify({"data": result}), 200)
