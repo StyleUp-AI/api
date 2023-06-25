@@ -60,4 +60,4 @@ jobs:
         with:
           app-name: 'style-backend-service'
           slot-name: 'Production'
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_A1A341CF0F5343AB9CAFB69D0448DA22 }}
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_9D75DCF03FEA43ADA5AD496A534E4D8F }}
