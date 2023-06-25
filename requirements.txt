@@ -28,3 +28,4 @@ llama_index
 beautifulsoup4
 SpeechRecognition
 google-api-python-client
+PyPDF2
