@@ -11,6 +11,7 @@ from langchain.llms import OpenAI
 from langchain.chains import ConversationChain
 from langchain.schema import HumanMessage, AIMessage
 from azure.storage.blob import BlobServiceClient
+from transformers import AutoTokenizer, BlenderbotForConditionalGeneration
 from pathlib import Path
 from PyPDF2 import PdfReader
 from flask import Blueprint, request, jsonify, make_response
@@ -47,6 +48,7 @@ def reset_context_helper(current_user):
         'calendar_context': ConversationBufferMemory(return_messages=True),
         'tutor_context': ConversationBufferMemory(return_messages=True),
         'audio_context': ConversationBufferMemory(return_messages=True),
+        'blenderbot_context': [],
     }
 
 def reset_one_context(current_user, context):
@@ -69,6 +71,8 @@ def reset_one_context(current_user, context):
         tmp_sessions[current_user['id']]['tutor_context'].chat_memory.add_ai_message(json.dumps(prompt, indent=2, default=str, ensure_ascii=False))
     elif context == 'audio_context':
         tmp_sessions[current_user['id']]['audio_context'].clear()
+    elif context == 'blenderbot_context':
+        tmp_sessions[current_user['id']]['blenderbot_context'] = []
     user_sessions = tmp_sessions
 
 async def talk_bot(user_input, file_name, current_user, collection_name, relevance_score):
@@ -441,3 +445,21 @@ def audio_agent(current_user):
         conversation_memory.chat_memory.add_user_message(text)
         conversation_memory.chat_memory.add_ai_message(response)
         return make_response(jsonify({"data": response}), 200)
+
+@bots_routes.route("/blenderbot_agent", methods=["POST"])
+@cross_origin(origin='*')
+@user_token_required
+def blenderbot_agent(current_user):
+    if current_user['id'] not in user_sessions:
+        reset_context_helper(current_user)
+    conversation_memory = user_sessions[current_user['id']]['blenderbot_context']
+    payload = request.json
+    mname = "facebook/blenderbot-400M-distill"
+    model = BlenderbotForConditionalGeneration.from_pretrained(mname)
+    tokenizer = AutoTokenizer.from_pretrained(mname)
+    conversation_memory.append(payload["input"])
+    inputs = tokenizer(conversation_memory, return_tensors="pt")
+    reply_ids = model.generate(**inputs)
+    answer = tokenizer.batch_decode(reply_ids, skip_special_tokens=True)[0]
+    user_sessions[current_user['id']]['blenderbot_context'].append(answer)
+    return make_response(jsonify({"data": answer}), 200)
