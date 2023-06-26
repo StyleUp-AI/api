@@ -11,8 +11,10 @@ from langchain.llms import OpenAI
 from langchain.chains import ConversationChain
 from langchain.schema import HumanMessage, AIMessage
 from azure.storage.blob import BlobServiceClient
-from transformers import AutoTokenizer, BlenderbotForConditionalGeneration
+from transformers import AutoTokenizer, BlenderbotForConditionalGeneration, AutoModel
+from torch.nn import functional as F
 from pathlib import Path
+import pandas as pd
 from PyPDF2 import PdfReader
 from flask import Blueprint, request, jsonify, make_response
 from flask_cors import cross_origin
@@ -29,7 +31,6 @@ from google_auth_oauthlib.flow import Flow
 flow = Flow.from_client_secrets_file(
     os.path.join(os.getcwd(), "src/main/routes/credentials.json") , SCOPES, redirect_uri=os.environ.get("GOOGLE_REDIRECT_URL")
 )
-
 bots_routes = Blueprint("bots_routes", __name__)
 
 model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
@@ -48,7 +49,7 @@ def reset_context_helper(current_user):
         'calendar_context': ConversationBufferMemory(return_messages=True),
         'tutor_context': ConversationBufferMemory(return_messages=True),
         'audio_context': ConversationBufferMemory(return_messages=True),
-        'blenderbot_context': [],
+        'blenderbot_context': []
     }
 
 def reset_one_context(current_user, context):
@@ -293,6 +294,9 @@ def add_collection(current_user):
                     text += page.extract_text()
                     text += '\n'
                 upload_to_blob_storage(json_file_path, json_file_name, text)
+            elif file_extension == '.xlsx':
+                df_sheet_all = pd.read_excel(file, sheet_name=None)
+                upload_to_blob_storage(json_file_path, json_file_name, str(df_sheet_all))
             else:
                 content = file.read()
                 upload_to_blob_storage(json_file_path, json_file_name, content)
@@ -326,19 +330,39 @@ def reset_context(current_user):
 @cross_origin(origin='*')
 @user_token_required
 def chat(current_user):
-    payload = request.json
-    if payload is None or payload["input"] is None:
+    user_input = ""
+    collection_name = ""
+    relevance_score = 0.8
+
+    if "multipart/form-data" in request.headers['Content-Type']:
+        file = request.files["audio_file"]
+        if "collection_name" in request.form:
+            collection_name = request.form.get("collection_name")
+        if "relevance_score" in request.form:
+            relevance_score = request.form.get("relevance_score")
+        try:
+            r = sr.Recognizer()
+            with sr.AudioFile(file) as source:
+                audio_data = r.record(source)
+                user_input = r.recognize_google(audio_data)
+        except Exception as e:
+            user_sessions[current_user['id']]['tutor_context'].chat_memory.add_ai_message(json.dumps("I can't understand, can you please repeat again?"))
+            return make_response(jsonify({"data": "I can't understand, can you please repeat again?"}), 200)
+    else:
+        payload = request.json
+        user_input = payload['input']
+        collection_name = payload['collection_name']
+        if 'relevance_score' in payload:
+            relevance_score = payload['relevance_score']
+    if user_input is None or user_input == "":
         return make_response(jsonify({"error": "Must provide input key"}), 400)
-    file_name = payload["collection_name"] + ".txt"
+    file_name = collection_name + ".txt"
     #find_collection = next((item for item in current_user['my_files'] if item["name"] == file_name), None)
     #if find_collection is None:
       #  return make_response(jsonify({"error": "User does't have this file"}), 400)
-    relevance_score = 0.8
-    if 'relevance_score' in payload:
-        relevance_score = payload['relevance_score']
     file_name = "Documents/" + current_user["id"] + '/' + file_name
     result = pool.submit(
-        asyncio.run, talk_bot(payload["input"], file_name, current_user, payload["collection_name"], relevance_score * 100)
+        asyncio.run, talk_bot(user_input, file_name, current_user, collection_name, relevance_score * 100)
     ).result()
     #result = await talk_bot(payload["input"], file_name, payload["relevance_score"])
     return make_response(jsonify({"data": result}), 200)
@@ -363,19 +387,34 @@ def authorize_session():
 @cross_origin(origin='*')
 @user_token_required
 def get_google_calendars(current_user):
-    payload = request.json
+    user_input = ""
+    user_info = ""
+    if "multipart/form-data" in request.headers['Content-Type']:
+        file = request.files["audio_file"]
+        user_info = request.form.get("user_info")
+        try:
+            r = sr.Recognizer()
+            with sr.AudioFile(file) as source:
+                audio_data = r.record(source)
+                user_input = r.recognize_google(audio_data)
+        except Exception as e:
+            user_sessions[current_user['id']]['tutor_context'].chat_memory.add_ai_message(json.dumps("I can't understand, can you please repeat again?"))
+            return make_response(jsonify({"data": "I can't understand, can you please repeat again?"}), 200)
+    else:
+        payload = request.json
+        user_input = payload['input']
+        user_info = payload['user_info']
     from src.main.routes.calendar_reader import GoogleCalendarReader
     from datetime import date
     if current_user['id'] not in user_sessions:
         reset_context_helper(current_user)
-    print(payload)
-    user_sessions[current_user['id']]['calendar_context'].chat_memory.add_user_message(payload['input'])
+    user_sessions[current_user['id']]['calendar_context'].chat_memory.add_user_message(user_input)
     loader = GoogleCalendarReader()
-    if "user_info" not in payload or payload["user_info"] == "":
+    if user_info == None or user_info == "":
         user_sessions[current_user['id']]['calendar_context'].chat_memory.add_ai_message("Need to login to google")
         return make_response(jsonify({"data": "Need to login to google"}), 200)
 
-    documents = loader.load_data(number_of_results=50, user_info=json.loads(payload["user_info"]))
+    documents = loader.load_data(number_of_results=50, user_info=json.loads(user_info))
     session = user_sessions[current_user['id']]['calendar_context']
     from typing import List
     from langchain.docstore.document import Document as LCDocument
@@ -398,7 +437,7 @@ def get_google_calendars(current_user):
 
     from langchain.chat_models import ChatOpenAI
     qa = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo", openai_api_key=api_key, openai_organization=org_id), retriever=vector_store.as_retriever(), memory=session)
-    result = qa({"question": payload['input']})
+    result = qa({"question": user_input})
     user_sessions[current_user['id']]['calendar_context'].chat_memory.add_ai_message(result['answer'])
     return make_response(jsonify({"data": result["answer"]}), 200)
 
@@ -406,6 +445,21 @@ def get_google_calendars(current_user):
 @cross_origin(origin='*')
 @user_token_required
 def tutor_agent(current_user):
+    user_input = ""
+    if "multipart/form-data" in request.headers['Content-Type']:
+        file = request.files["audio_file"]
+        try:
+            r = sr.Recognizer()
+            with sr.AudioFile(file) as source:
+                audio_data = r.record(source)
+                user_input = r.recognize_google(audio_data)
+        except Exception as e:
+            user_sessions[current_user['id']]['tutor_context'].chat_memory.add_ai_message(json.dumps("I can't understand, can you please repeat again?"))
+            return make_response(jsonify({"data": "I can't understand, can you please repeat again?"}), 200)
+
+    else:
+        payload = request.json
+        user_input = payload['input']
     payload = request.json
     prompt = json.load(open(os.path.join(os.getcwd(), 'src/main/routes/ranedeer.json'), 'rb'))
     if current_user['id'] not in user_sessions or 'tutor_context' not in user_sessions[current_user['id']]:
@@ -418,7 +472,7 @@ def tutor_agent(current_user):
             verbose=True,
             memory=user_sessions[current_user['id']]['tutor_context'],
         )
-    response = conversation.predict(input=payload['input'])
+    response = conversation.predict(input=user_input)
 
     return make_response(jsonify({"data": response}), 200)
 
