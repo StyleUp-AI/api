@@ -460,7 +460,6 @@ def tutor_agent(current_user):
     else:
         payload = request.json
         user_input = payload['input']
-    payload = request.json
     prompt = json.load(open(os.path.join(os.getcwd(), 'src/main/routes/ranedeer.json'), 'rb'))
     if current_user['id'] not in user_sessions or 'tutor_context' not in user_sessions[current_user['id']]:
         reset_context_helper(current_user)
