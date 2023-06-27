@@ -46,7 +46,7 @@ def reset_context_helper(current_user):
     user_sessions[current_user['id']] = {
         'context': {},
         'prompt_template': sk_prompt,
-        'calendar_context': ConversationBufferMemory(return_messages=True),
+        'calendar_context': ConversationBufferMemory(memory_key="chat_history", return_messages=True),
         'tutor_context': ConversationBufferMemory(return_messages=True),
         'audio_context': ConversationBufferMemory(return_messages=True),
         'blenderbot_context': []
@@ -150,6 +150,12 @@ def get_chat_history(current_user):
     res = []
     if 'history' in data:
         for item in data['history']:
+            if type(item) is HumanMessage:
+                res.append('Human: ' + item.content)
+            elif item.content != json.dumps(prompt, indent=2, default=str, ensure_ascii=False):
+                res.append('AIMessage: ' + item.content)
+    elif 'chat_history' in data:
+        for item in data['chat_history']:
             if type(item) is HumanMessage:
                 res.append('Human: ' + item.content)
             elif item.content != json.dumps(prompt, indent=2, default=str, ensure_ascii=False):
