@@ -112,7 +112,7 @@ def update_collection(current_user):
     file_path = "Documents/" + current_user["id"]
     file_name = payload["collection_name"] + ".txt"
     try:
-        upload_to_blob_storage(file_path, file_name, payload["collection_name"])
+        upload_to_blob_storage(file_path, file_name, payload["collection_content"])
     except Exception as e:
         print(e)
         return make_response(jsonify({"error": "Cannot update the collection"}), 400)
