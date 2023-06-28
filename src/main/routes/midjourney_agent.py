@@ -46,7 +46,7 @@ class MidjourneyAgent:
             'id': self.id,
             'name': 'imagine',
             'type': 1,
-            'options': [{'type': 1, 'name': 'prompt', 'value': str(prompt)}],
+            'options': [{'type': 3, 'name': 'prompt', 'value': str(prompt)}],
             'attachments': []}
             }
 
@@ -82,7 +82,7 @@ class MidjourneyAgent:
                             filename = message['attachments'][0]['filename']
                             found = False
                             for index, item in enumerate(self.user_images):
-                                if item['id'] == id:
+                                if 'id' in item and item['id'] == id:
                                     found = True
                                     break
                             if not found:
