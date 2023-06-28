@@ -22,6 +22,7 @@ from sentence_transformers import SentenceTransformer
 from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_container_name, user_sessions, upload_to_blob_storage
 from src.main.utils.model_actions import train_mode
 from src.main.routes.crawler import Crawler
+from src.main.routes.midjourney_agent import MidjourneyAgent
 from langchain.chat_models import ChatOpenAI
 from langchain.chains import ConversationChain
 
@@ -522,3 +523,14 @@ def blenderbot_agent(current_user):
     answer = tokenizer.batch_decode(reply_ids, skip_special_tokens=True)[0]
     user_sessions[current_user['id']]['blenderbot_context'].append(answer)
     return make_response(jsonify({"data": answer}), 200)
+
+@bots_routes.route("/midjourney_agent", methods=["POST"])
+@cross_origin(origin='*')
+@user_token_required
+def midjourney_agent(current_user):
+    payload = request.json
+    prompt = payload['prompt']
+    client = MidjourneyAgent(current_user, prompt)
+    thread = Process(target=client.main)
+    thread.start()
+    return make_response(jsonify({"data": "Image is generating"}), 200)

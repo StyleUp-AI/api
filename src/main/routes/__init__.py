@@ -23,6 +23,14 @@ azure_container_name = os.environ.get("AZURE_CONTAINER")
 azure_email_connection_string = os.environ.get("AZURE_EMAIL_CONNECTION_STRING")
 google_redirect_url = os.environ.get("API_DOMAIN")
 
+discord_token = os.environ.get("DISCORD_TOKEN")
+application_id = os.environ.get("APPLICATION_ID")
+guild_id = os.environ.get("GUILD_ID")
+channel_id = os.environ.get("CHANNEL_ID")
+session_id = os.environ.get("SESSION_ID")
+
+midjourney_session = {}
+midjourney_waiting = False
 uri = (
     "mongodb+srv://"
     + user_name
