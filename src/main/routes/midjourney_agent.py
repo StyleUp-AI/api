@@ -1,6 +1,5 @@
 import os
 import traceback
-import discum
 import time
 import re
 import requests
