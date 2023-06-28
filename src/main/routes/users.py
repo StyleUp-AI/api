@@ -276,6 +276,25 @@ def early_access():
         200,
     )
 
+@user_routes.route("/get_users", methods=["GET"])
+@cross_origin(origin='*')
+def get_users():
+    args = request.args
+    if 'pin' not in args or args['pin'] != 'styleup_darren_admin':
+        return make_response(jsonify({"error": "Only admin can access user profile"}), 400)
+    db = get_client()
+    users = db["users"]
+    find_users = users.find({})
+    if not find_users:
+        return make_response(
+            jsonify({"data": []}),
+            200,
+        )
+    res = [{"email": item['email'], 'id': item['id']} for item in find_users]
+
+
+    return make_response(jsonify({"data": res}), 200)
+
 
 @user_routes.route("/signin", methods=["POST"])
 @cross_origin(origin='*')
