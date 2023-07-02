@@ -140,12 +140,13 @@ def delete_user(current_user):
 @cross_origin(origin='*')
 @user_token_required
 def add_api_key(current_user):
+    payload = request.json
     db = get_client()
     api_keys = db["api_keys"]
     res = list(api_keys.find({"user_id": current_user['id']}))
     if len(res) > 3:
         return make_response(jsonify({"error": "One user can at most own 3 api keys"}), 400)
-    api_keys.insert_one({"key": secrets.token_urlsafe(32), "user_id": current_user['id']})
+    api_keys.insert_one({"key": secrets.token_urlsafe(32), "user_id": current_user['id'], 'name': payload['name'], 'crated': datetime.now(timezone.utc), 'last_used': 'Never'})
     return make_response(jsonify({"data": "New API Key Added!"}), 201)
 
 @user_routes.route("/get_api_keys", methods=["GET"])
