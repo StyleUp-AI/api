@@ -1,6 +1,7 @@
 import asyncio
 import os
 import json
+import re
 import asyncio, concurrent.futures
 import speech_recognition as sr
 from multiprocessing import Process
@@ -11,7 +12,7 @@ from langchain.llms import OpenAI
 from langchain.chains import ConversationChain
 from langchain.schema import HumanMessage, AIMessage
 from azure.storage.blob import BlobServiceClient
-from transformers import AutoTokenizer, BlenderbotForConditionalGeneration, AutoModel
+from transformers import BlenderbotTokenizer, BlenderbotForConditionalGeneration, AutoModel
 from torch.nn import functional as F
 from pathlib import Path
 import pandas as pd
@@ -40,6 +41,11 @@ pool = concurrent.futures.ThreadPoolExecutor()
 # Prepare OpenAI service using credentials stored in the `.env` file
 api_key = os.environ.get("OPENAI_API_KEY")
 org_id = os.environ.get("OPENAI_ORG_ID")
+
+CLEANR = re.compile('<.*?>|&([a-z0-9]+|#[0-9]{1,6}|#x[0-9a-f]{1,6});')
+def cleanhtml(raw_html):
+  cleantext = re.sub(CLEANR, '', raw_html)
+  return cleantext
 
 def reset_context_helper(current_user):
     global user_sessions
@@ -530,13 +536,12 @@ def blenderbot_agent(current_user):
     conversation_memory = user_sessions[current_user['id']]['blenderbot_context']
     mname = "facebook/blenderbot-400M-distill"
     model = BlenderbotForConditionalGeneration.from_pretrained(mname)
-    tokenizer = AutoTokenizer.from_pretrained(mname)
-    conversation_memory.append(user_input)
-    inputs = tokenizer(conversation_memory, return_tensors="pt")
+    tokenizer = BlenderbotTokenizer.from_pretrained(mname)
+    utterance = user_input
+    inputs = tokenizer(utterance, return_tensors="pt")
     reply_ids = model.generate(**inputs)
-    answer = tokenizer.batch_decode(reply_ids, skip_special_tokens=True)[0]
-    user_sessions[current_user['id']]['blenderbot_context'].append(answer)
-    return make_response(jsonify({"data": answer}), 200)
+    answer = tokenizer.decode(reply_ids[0])
+    return make_response(jsonify({"data": cleanhtml(answer)}), 200)
 
 @bots_routes.route("/midjourney_agent", methods=["POST"])
 @cross_origin(origin='*')
