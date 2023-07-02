@@ -512,12 +512,26 @@ def audio_agent(current_user):
 def blenderbot_agent(current_user):
     if current_user['id'] not in user_sessions:
         reset_context_helper(current_user)
+    user_input = ""
+    if "multipart/form-data" in request.headers['Content-Type']:
+        file = request.files["audio_file"]
+        try:
+            r = sr.Recognizer()
+            with sr.AudioFile(file) as source:
+                audio_data = r.record(source)
+                user_input = r.recognize_google(audio_data)
+        except Exception as e:
+            user_sessions[current_user['id']]['tutor_context'].chat_memory.add_ai_message(json.dumps("I can't understand, can you please repeat again?"))
+            return make_response(jsonify({"data": "I can't understand, can you please repeat again?"}), 200)
+
+    else:
+        payload = request.json
+        user_input = payload['input']
     conversation_memory = user_sessions[current_user['id']]['blenderbot_context']
-    payload = request.json
     mname = "facebook/blenderbot-400M-distill"
     model = BlenderbotForConditionalGeneration.from_pretrained(mname)
     tokenizer = AutoTokenizer.from_pretrained(mname)
-    conversation_memory.append(payload["input"])
+    conversation_memory.append(user_input)
     inputs = tokenizer(conversation_memory, return_tensors="pt")
     reply_ids = model.generate(**inputs)
     answer = tokenizer.batch_decode(reply_ids, skip_special_tokens=True)[0]
