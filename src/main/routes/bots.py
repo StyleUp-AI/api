@@ -203,6 +203,7 @@ def delete_collection(current_user):
     if args["collection_name"] is None:
         return make_response(jsonify({"error": "Must provide collection name"}), 400)
     file_path = "Documents/" + current_user["id"]
+    print(current_user['my_files'])
     file_name = args["collection_name"] + ".txt"
     if 'my_files' not in current_user:
         return make_response(jsonify({"error": "User doens't own this collection"}), 400)
@@ -292,7 +293,7 @@ def add_collection(current_user):
         if payload['collection_type'] == 'link':
             collection_name = json_file_name
             if "collection_name" in payload:
-                collection_name = payload["collection_name"]
+                collection_name = payload["collection_name"] + ".txt"
             crawler = Crawler(json_file_path, json_file_name, current_user, collection_name, [payload["collection_content"]], payload['link_levels'])
             thread = Process(target=crawler.run)
             thread.start()
