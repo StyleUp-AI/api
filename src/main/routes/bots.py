@@ -450,7 +450,7 @@ def get_google_calendars(current_user):
     vector_store = Chroma.from_documents(documents, embeddings)
 
     from langchain.chat_models import ChatOpenAI
-    qa = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo", openai_api_key=api_key, openai_organization=org_id), retriever=vector_store.as_retriever(), memory=session)
+    qa = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=2, model_name="gpt-3.5-turbo", openai_api_key=api_key, openai_organization=org_id), retriever=vector_store.as_retriever(), memory=session)
     result = qa({"question": user_input})
     user_sessions[current_user['id']]['calendar_context'].chat_memory.add_ai_message(result['answer'])
     return make_response(jsonify({"data": result["answer"]}), 200)

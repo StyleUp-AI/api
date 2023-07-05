@@ -34,7 +34,7 @@ class GoogleCalendarReader(BaseReader):
         user_info,
         number_of_results: Optional[int] = 100,
         start_date: Optional[Union[str, datetime.date]] = None,
-    ):
+    ) -> List[Document]:
 
         """Load data from user's calendar.
 
@@ -56,14 +56,18 @@ class GoogleCalendarReader(BaseReader):
         start_datetime = datetime.datetime.combine(start_date, datetime.time.min)
         start_datetime_utc = start_datetime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
-        events_result = service.events().list(
+        events_result = (service.events().list(
                 calendarId="primary",
                 timeMin=start_datetime_utc,
                 maxResults=number_of_results,
-                singleEvents=False,
-            ).execute()
+                singleEvents=True,
+                orderBy="startTime",
+            ).execute())
 
         events = events_result.get("items", [])
+        if not events:
+            return []
+
         results = []
         for event in events:
             if "dateTime" in event["start"]:
