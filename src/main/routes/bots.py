@@ -429,6 +429,7 @@ def get_google_calendars(current_user):
         return make_response(jsonify({"data": "Need to login to google"}), 200)
 
     documents = loader.load_data(user_info=json.loads(user_info))
+    print(documents)
     session = user_sessions[current_user['id']]['calendar_context']
     from typing import List
     from langchain.docstore.document import Document as LCDocument
