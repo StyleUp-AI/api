@@ -2,6 +2,7 @@ import asyncio
 import os
 import json
 import re
+import openai
 import asyncio, concurrent.futures
 import speech_recognition as sr
 from multiprocessing import Process
@@ -23,10 +24,12 @@ from sentence_transformers import SentenceTransformer
 from src.main.routes import user_token_required, bot_api_key_required, get_client, sk_prompt, connection_string, azure_container_name, user_sessions, upload_to_blob_storage
 from src.main.utils.model_actions import train_mode
 from src.main.routes.crawler import Crawler
+from src.main.routes.semantic_search import SemanticSearch
 from src.main.routes.midjourney_agent import MidjourneyAgent
 from langchain.chat_models import ChatOpenAI
 from langchain.chains import ConversationChain
 
+recommender = SemanticSearch()
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 from google_auth_oauthlib.flow import Flow
 
@@ -47,6 +50,19 @@ def cleanhtml(raw_html):
   cleantext = re.sub(CLEANR, '', raw_html)
   return cleantext
 
+def generate_text(openAI_key,prompt, engine="text-davinci-003"):
+    openai.api_key = openAI_key
+    completions = openai.Completion.create(
+        engine=engine,
+        prompt=prompt,
+        max_tokens=512,
+        n=1,
+        stop=None,
+        temperature=0.7,
+    )
+    message = completions.choices[0].text
+    return message
+
 def reset_context_helper(current_user):
     global user_sessions
     global sk_prompt
@@ -58,6 +74,28 @@ def reset_context_helper(current_user):
         'audio_context': ConversationBufferMemory(return_messages=True),
         'blenderbot_context': []
     }
+
+def preprocess(text):
+    text = text.replace('\n', ' ')
+    text = re.sub('\s+', ' ', text)
+    return text
+
+def text_to_chunks(texts, word_length=1500, start_page=1):
+    text_toks = [t.split(' ') for t in texts]
+    page_nums = []
+    chunks = []
+
+    for idx, words in enumerate(text_toks):
+        for i in range(0, len(words), word_length):
+            chunk = words[i:i+word_length]
+            if (i+word_length) > len(words) and (len(chunk) < word_length) and (
+                len(text_toks) != (idx+1)):
+                text_toks[idx+1] = chunk + text_toks[idx+1]
+                continue
+            chunk = ' '.join(chunk).strip()
+            chunk = f'[{idx+start_page}]' + ' ' + '"' + chunk + '"'
+            chunks.append(chunk)
+    return chunks
 
 def reset_one_context(current_user, context):
     global user_sessions
@@ -85,6 +123,7 @@ def reset_one_context(current_user, context):
 
 async def talk_bot(user_input, file_name, current_user, collection_name, relevance_score):
     global user_sessions
+    global recommender
     global llm
     if current_user['id'] not in user_sessions:
         reset_context_helper(current_user)
@@ -93,19 +132,28 @@ async def talk_bot(user_input, file_name, current_user, collection_name, relevan
     conversation_memory = user_sessions[current_user['id']]['context'][collection_name]
     az_loaders = AzureBlobStorageFileLoader(connection_string, azure_container_name, file_name)
     loaders = az_loaders.load()
-    chain = load_qa_chain(OpenAI(temperature=0), chain_type="map_rerank", return_intermediate_steps=True)
-    results = chain({"input_documents": loaders, "question": user_input}, return_only_outputs=True)
-    results = results["intermediate_steps"]
-    max_score_item = max(results, key=lambda x:float(x['score']))
-    if float(max_score_item['score']) >= relevance_score:
-        conversation_memory.chat_memory.add_user_message(user_input)
-        conversation_memory.chat_memory.add_ai_message(max_score_item['answer'])
-        return max_score_item['answer']
-    conversation = ConversationChain(memory=conversation_memory, prompt=user_sessions[current_user['id']]['prompt_template'], llm=OpenAI(temperature=0))
-    obj = conversation.predict(input=user_input).split("AI: ",1)[1]
+    loaders = [item.page_content for item in loaders]
+    recommender.fit(loaders)
+    topn_chunks = recommender(user_input)
+    prompt = ""
+    prompt += 'search results:\n\n'
+    for c in topn_chunks:
+        prompt += str(c) + '\n\n'
+    prompt += "Instructions: Compose a comprehensive reply to the query using the search results given. "\
+              "Cite each reference using [number] notation (every result has this number at the beginning). "\
+              "Citation should be done at the end of each sentence. If the search results mention multiple subjects "\
+              "with the same name, create separate answers for each. Only include information found in the results and "\
+              "don't add any additional information. Make sure the answer is correct and don't output false content. "\
+              "If the text does not relate to the query, simply state 'Found Nothing'. Ignore outlier "\
+              "search results which has nothing to do with the question. Only answer what is asked. The "\
+              "answer should be short and concise.\n\nQuery: {question}\nAnswer: "
+
+    prompt += f"Query: {user_input}\nAnswer:"
+    answer = generate_text(api_key, prompt)
+
     conversation_memory.chat_memory.add_user_message(user_input)
-    conversation_memory.chat_memory.add_ai_message(obj)
-    return obj
+    conversation_memory.chat_memory.add_ai_message(answer)
+    return answer
 
 @bots_routes.route("/update_collection", methods=["PUT"])
 @cross_origin(origin='*')
@@ -303,17 +351,23 @@ def add_collection(current_user):
             file_name, file_extension = os.path.splitext(file.filename)
             if file_extension == '.pdf':
                 reader = PdfReader(file)
-                text = ""
+                text_list = []
                 for page in reader.pages:
-                    text += page.extract_text()
-                    text += '\n'
-                upload_to_blob_storage(json_file_path, json_file_name, text)
+                    text = page.extract_text()
+                    text = preprocess(text)
+                    text_list.append(text)
+                chunks = text_to_chunks(text_list)
+                upload_to_blob_storage(json_file_path, json_file_name, json.dumps(chunks, indent=2, default=str, ensure_ascii=False))
             elif file_extension == '.xlsx':
                 df_sheet_all = pd.read_excel(file, sheet_name=None)
-                upload_to_blob_storage(json_file_path, json_file_name, str(df_sheet_all))
+                df_sheet_all = preprocess(df_sheet_all)
+                chunks = text_to_chunks([df_sheet_all])
+                upload_to_blob_storage(json_file_path, json_file_name, json.dumps(chunks, indent=2, default=str, ensure_ascii=False))
             else:
                 content = file.read()
-                upload_to_blob_storage(json_file_path, json_file_name, content)
+                content = preprocess(content)
+                chunks = text_to_chunks(content)
+                upload_to_blob_storage(json_file_path, json_file_name, json.dumps(chunks, indent=2, default=str, ensure_ascii=False))
         else:
             upload_to_blob_storage(json_file_path, json_file_name, payload["collection_content"])
     except Exception as e:
