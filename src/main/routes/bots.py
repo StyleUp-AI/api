@@ -125,7 +125,7 @@ async def talk_bot(user_input, file_name, current_user, collection_name, relevan
     global user_sessions
     global recommender
     global llm
-    
+
     if current_user['id'] not in user_sessions:
         reset_context_helper(current_user)
     if file_name not in user_sessions[current_user['id']]['context']:
@@ -348,27 +348,40 @@ def add_collection(current_user):
             thread.start()
             return make_response(jsonify({"data": "Web Crawler started"}), 200)
         elif payload['collection_type'] == 'file':
-            file = request.files["collection_content"]
-            file_name, file_extension = os.path.splitext(file.filename)
-            if file_extension == '.pdf':
-                reader = PdfReader(file)
-                text_list = []
-                for page in reader.pages:
-                    text = page.extract_text()
-                    text = preprocess(text)
-                    text_list.append(text)
-                chunks = text_to_chunks(text_list)
-                upload_to_blob_storage(json_file_path, json_file_name, json.dumps(chunks, indent=2, default=str, ensure_ascii=False))
-            elif file_extension == '.xlsx':
-                df_sheet_all = pd.read_excel(file, sheet_name=None)
-                df_sheet_all = preprocess(df_sheet_all)
-                chunks = text_to_chunks([df_sheet_all])
-                upload_to_blob_storage(json_file_path, json_file_name, json.dumps(chunks, indent=2, default=str, ensure_ascii=False))
-            else:
-                content = file.read()
-                content = preprocess(content)
-                chunks = text_to_chunks(content)
-                upload_to_blob_storage(json_file_path, json_file_name, json.dumps(chunks, indent=2, default=str, ensure_ascii=False))
+
+            for file in request.files.getlist('collection_content'):
+                print(file)
+                file_name, file_extension = os.path.splitext(file.filename)
+                file_name = file_name + '.txt'
+                if file_extension == '.pdf':
+                    reader = PdfReader(file)
+                    text_list = []
+                    for page in reader.pages:
+                        text = page.extract_text()
+                        text = preprocess(text)
+                        text_list.append(text)
+                    chunks = text_to_chunks(text_list)
+                    upload_to_blob_storage(json_file_path, file_name, json.dumps(chunks, indent=2, default=str, ensure_ascii=False))
+                elif file_extension == '.xlsx':
+                    df_sheet_all = pd.read_excel(file, sheet_name=None)
+                    df_sheet_all = preprocess(df_sheet_all)
+                    chunks = text_to_chunks([df_sheet_all])
+                    upload_to_blob_storage(json_file_path, file_name, json.dumps(chunks, indent=2, default=str, ensure_ascii=False))
+                else:
+                    content = file.read()
+                    content = preprocess(content)
+                    chunks = text_to_chunks(content)
+                    upload_to_blob_storage(json_file_path, file_name, json.dumps(chunks, indent=2, default=str, ensure_ascii=False))
+                db = get_client()
+                users = db["users"]
+                if "my_files" in current_user:
+                    current_user["my_files"].append({'name': file_name, 'model': ''})
+                else:
+                    current_user["my_files"] = [{'name': file_name, 'model': ''}]
+                users.update_one(
+                    {"id": current_user["id"]}, {"$set": {"my_files": current_user["my_files"]}}
+                )
+            return make_response(jsonify({"data": "New collection added"}), 201)
         else:
             upload_to_blob_storage(json_file_path, json_file_name, payload["collection_content"])
     except Exception as e:
