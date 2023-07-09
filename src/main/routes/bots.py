@@ -3,6 +3,8 @@ import os
 import json
 import re
 import openai
+import fitz
+import tempfile
 import asyncio, concurrent.futures
 import speech_recognition as sr
 from multiprocessing import Process
@@ -10,14 +12,16 @@ from langchain.document_loaders import AzureBlobStorageFileLoader
 from langchain.chains.question_answering import load_qa_chain
 from langchain.memory import ConversationBufferMemory
 from langchain.llms import OpenAI
+from llama_index.readers.schema.base import Document
+from langchain.text_splitter import CharacterTextSplitter
 from langchain.chains import ConversationChain
 from langchain.schema import HumanMessage, AIMessage
+from langchain.chains.summarize import load_summarize_chain
 from azure.storage.blob import BlobServiceClient
 from transformers import BlenderbotTokenizer, BlenderbotForConditionalGeneration, AutoModel
 from torch.nn import functional as F
 from pathlib import Path
 import pandas as pd
-from PyPDF2 import PdfReader
 from flask import Blueprint, request, jsonify, make_response
 from flask_cors import cross_origin
 from sentence_transformers import SentenceTransformer
@@ -50,19 +54,6 @@ def cleanhtml(raw_html):
   cleantext = re.sub(CLEANR, '', raw_html)
   return cleantext
 
-def generate_text(openAI_key,prompt, engine="text-davinci-003"):
-    openai.api_key = openAI_key
-    completions = openai.Completion.create(
-        engine=engine,
-        prompt=prompt,
-        max_tokens=512,
-        n=1,
-        stop=None,
-        temperature=0.7,
-    )
-    message = completions.choices[0].text
-    return message
-
 def reset_context_helper(current_user):
     global user_sessions
     global sk_prompt
@@ -80,9 +71,8 @@ def preprocess(text):
     text = re.sub('\s+', ' ', text)
     return text
 
-def text_to_chunks(texts, word_length=1500, start_page=1):
+def text_to_chunks(texts, word_length=150, start_page=1):
     text_toks = [t.split(' ') for t in texts]
-    page_nums = []
     chunks = []
 
     for idx, words in enumerate(text_toks):
@@ -125,36 +115,48 @@ async def talk_bot(user_input, file_name, current_user, collection_name, relevan
     global user_sessions
     global recommender
     global llm
-
+    print(file_name)
     if current_user['id'] not in user_sessions:
         reset_context_helper(current_user)
     if file_name not in user_sessions[current_user['id']]['context']:
-        user_sessions[current_user['id']]['context'][collection_name] = ConversationBufferMemory(return_messages=True)
+        user_sessions[current_user['id']]['context'][collection_name] = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
     conversation_memory = user_sessions[current_user['id']]['context'][collection_name]
+    conversation_memory.chat_memory.add_user_message(user_input)
+
     az_loaders = AzureBlobStorageFileLoader(connection_string, azure_container_name, file_name)
     loaders = az_loaders.load()
     loaders = [item.page_content for item in loaders]
-    recommender.fit(loaders)
+    sub_content = []
+    for item in loaders:
+        sub_content += item.split("\", ")
+    recommender.fit(sub_content)
     topn_chunks = recommender(user_input)
-    prompt = ""
-    prompt += 'search results:\n\n'
-    for c in topn_chunks:
-        prompt += str(c) + '\n\n'
-    prompt += "Instructions: Compose a comprehensive reply to the query using the search results given. "\
-              "Cite each reference using [number] notation (every result has this number at the beginning). "\
-              "Citation should be done at the end of each sentence. If the search results mention multiple subjects "\
-              "with the same name, create separate answers for each. Only include information found in the results and "\
-              "don't add any additional information. Make sure the answer is correct and don't output false content. "\
-              "If the text does not relate to the query, simply state 'Found Nothing'. Ignore outlier "\
-              "search results which has nothing to do with the question. Only answer what is asked. The "\
-              "answer should be short and concise.\n\nQuery: {question}\nAnswer: "
+    topn_chunks = [Document(text=item) for item in topn_chunks]
 
-    prompt += f"Query: {user_input}\nAnswer:"
-    answer = generate_text(api_key, prompt)
+    from typing import List
+    from langchain.docstore.document import Document as LCDocument
 
-    conversation_memory.chat_memory.add_user_message(user_input)
-    conversation_memory.chat_memory.add_ai_message(answer)
-    return answer
+    formatted_documents: List[LCDocument] = [doc.to_langchain_format() for doc in topn_chunks]
+    #from langchain import OpenAI
+    from langchain.chains import ConversationalRetrievalChain
+    from langchain.embeddings.openai import OpenAIEmbeddings
+    from langchain.vectorstores import Chroma
+    from langchain.text_splitter import CharacterTextSplitter
+    '''
+    OpenAIEmbeddings uses text-embedding-ada-002
+    '''
+
+    text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
+    documents = text_splitter.split_documents(formatted_documents)
+
+    embeddings = OpenAIEmbeddings()
+    vector_store = Chroma.from_documents(documents, embeddings)
+
+    from langchain.chat_models import ChatOpenAI
+    qa = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=2, model_name="gpt-3.5-turbo", openai_api_key=api_key, openai_organization=org_id), retriever=vector_store.as_retriever(), memory=conversation_memory)
+    result = qa({"question": user_input})
+    conversation_memory.chat_memory.add_ai_message(result['answer'])
+    return result["answer"]
 
 @bots_routes.route("/update_collection", methods=["PUT"])
 @cross_origin(origin='*')
@@ -338,55 +340,55 @@ def add_collection(current_user):
                 jsonify({"error": "Collection name must be unique"}), 400
             )
 
-    try:
-        if payload['collection_type'] == 'link':
-            collection_name = json_file_name
-            if "collection_name" in payload:
-                collection_name = payload["collection_name"] + ".txt"
-            crawler = Crawler(json_file_path, json_file_name, current_user, collection_name, [payload["collection_content"]], payload['link_levels'])
-            thread = Process(target=crawler.run)
-            thread.start()
-            return make_response(jsonify({"data": "Web Crawler started"}), 200)
-        elif payload['collection_type'] == 'file':
-
-            for file in request.files.getlist('collection_content'):
-                print(file)
-                file_name, file_extension = os.path.splitext(file.filename)
-                file_name = file_name + '.txt'
-                if file_extension == '.pdf':
-                    reader = PdfReader(file)
+    if payload['collection_type'] == 'link':
+        collection_name = json_file_name
+        if "collection_name" in payload:
+            collection_name = payload["collection_name"] + ".txt"
+        crawler = Crawler(json_file_path, json_file_name, current_user, collection_name, [payload["collection_content"]], payload['link_levels'])
+        thread = Process(target=crawler.run)
+        thread.start()
+        return make_response(jsonify({"data": "Web Crawler started"}), 200)
+    elif payload['collection_type'] == 'file':
+        for file in request.files.getlist('collection_content'):
+            file_name, file_extension = os.path.splitext(file.filename)
+            file_name = file_name + '.txt'
+            if file_extension == '.pdf':
+                with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                    file.save(tmp)
+                    tmp.close()
+                    doc = fitz.open(tmp.name)
+                    total_pages = doc.page_count
                     text_list = []
-                    for page in reader.pages:
-                        text = page.extract_text()
+                    for i in range(0, total_pages):
+                        text = doc.load_page(i).get_text("text")
                         text = preprocess(text)
                         text_list.append(text)
+                    doc.close()
                     chunks = text_to_chunks(text_list)
-                    upload_to_blob_storage(json_file_path, file_name, json.dumps(chunks, indent=2, default=str, ensure_ascii=False))
-                elif file_extension == '.xlsx':
-                    df_sheet_all = pd.read_excel(file, sheet_name=None)
-                    df_sheet_all = preprocess(df_sheet_all)
-                    chunks = text_to_chunks([df_sheet_all])
-                    upload_to_blob_storage(json_file_path, file_name, json.dumps(chunks, indent=2, default=str, ensure_ascii=False))
-                else:
-                    content = file.read()
-                    content = preprocess(content)
-                    chunks = text_to_chunks(content)
-                    upload_to_blob_storage(json_file_path, file_name, json.dumps(chunks, indent=2, default=str, ensure_ascii=False))
-                db = get_client()
-                users = db["users"]
-                if "my_files" in current_user:
-                    current_user["my_files"].append({'name': file_name, 'model': ''})
-                else:
-                    current_user["my_files"] = [{'name': file_name, 'model': ''}]
-                users.update_one(
-                    {"id": current_user["id"]}, {"$set": {"my_files": current_user["my_files"]}}
-                )
-            return make_response(jsonify({"data": "New collection added"}), 201)
-        else:
-            upload_to_blob_storage(json_file_path, json_file_name, payload["collection_content"])
-    except Exception as e:
-        print(e)
-        return make_response(jsonify({"error": "Cannot save the collection"}), 400)
+                    upload_to_blob_storage(json_file_path, json_file_name, json.dumps(chunks, indent=2, default=str, ensure_ascii=False))
+                    os.unlink(tmp.name)
+            elif file_extension == '.xlsx':
+                df_sheet_all = pd.read_excel(file, sheet_name=None)
+                df_sheet_all = preprocess(df_sheet_all)
+                chunks = text_to_chunks([df_sheet_all])
+                upload_to_blob_storage(json_file_path, json_file_name, json.dumps(chunks, indent=2, default=str, ensure_ascii=False))
+            else:
+                content = file.read()
+                content = preprocess(content)
+                chunks = text_to_chunks([content])
+                upload_to_blob_storage(json_file_path, json_file_name, json.dumps(chunks, indent=2, default=str, ensure_ascii=False))
+            db = get_client()
+            users = db["users"]
+            if "my_files" in current_user:
+                current_user["my_files"].append({'name': json_file_name, 'model': ''})
+            else:
+                current_user["my_files"] = [{'name': json_file_name, 'model': ''}]
+            users.update_one(
+                {"id": current_user["id"]}, {"$set": {"my_files": current_user["my_files"]}}
+            )
+        return make_response(jsonify({"data": "New collection added"}), 200)
+    else:
+        upload_to_blob_storage(json_file_path, json_file_name, payload["collection_content"])
     db = get_client()
     users = db["users"]
     if "my_files" in current_user:
@@ -396,7 +398,7 @@ def add_collection(current_user):
     users.update_one(
         {"id": current_user["id"]}, {"$set": {"my_files": current_user["my_files"]}}
     )
-    return make_response(jsonify({"data": "New collection added"}), 201)
+    return make_response(jsonify({"data": "New collection added"}), 200)
 
 
 @bots_routes.route("/reset_context", methods=["POST"])
@@ -497,7 +499,6 @@ def get_google_calendars(current_user):
         return make_response(jsonify({"data": "Need to login to google"}), 200)
 
     documents = loader.load_data(user_info=json.loads(user_info))
-    print(documents)
     session = user_sessions[current_user['id']]['calendar_context']
     from typing import List
     from langchain.docstore.document import Document as LCDocument

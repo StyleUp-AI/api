@@ -1,3 +1,5 @@
+import os
+import re
 import tensorflow_hub as hub
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
@@ -20,12 +22,15 @@ class SemanticSearch:
         self.fitted = True
 
 
-    def __call__(self, text, return_data=False):
+    def __call__(self, text, return_data=True):
         inp_emb = self.use([text])
-        neighbors = self.nn.kneighbors(inp_emb, return_distance=False)[0]
-
+        neighbors = self.nn.kneighbors(inp_emb, return_distance=False)
         if return_data:
-            return [self.data[i] for i in neighbors]
+            res = []
+            for i in neighbors:
+                for j in i:
+                    res.append(re.sub(r'[\\"]', '', self.data[j]))
+            return res
         else:
             return neighbors
 
