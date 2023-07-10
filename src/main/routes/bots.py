@@ -83,7 +83,7 @@ def text_to_chunks(texts, word_length=150, start_page=1):
                 text_toks[idx+1] = chunk + text_toks[idx+1]
                 continue
             chunk = ' '.join(chunk).strip()
-            chunk = f'[{idx+start_page}]' + ' ' + '"' + chunk + '"'
+            chunk = '"' + chunk + '"'
             chunks.append(chunk)
     return chunks
 
@@ -115,7 +115,6 @@ async def talk_bot(user_input, file_name, current_user, collection_name, relevan
     global user_sessions
     global recommender
     global llm
-    print(file_name)
     if current_user['id'] not in user_sessions:
         reset_context_helper(current_user)
     if file_name not in user_sessions[current_user['id']]['context']:
